@@ -62,12 +62,13 @@ const dom = {
   robotStat: document.querySelector("#robot-stat"),
   bankStat: document.querySelector("#bank-stat"),
   presentStat: document.querySelector("#present-stat"),
-  lifeStat: document.querySelector("#life-stat"),
+  purseStat: document.querySelector("#purse-stat"),
   presentGrid: document.querySelector("#present-grid"),
   purseCoins: document.querySelector("#purse-coins"),
   bankCoins: document.querySelector("#bank-coins"),
   robotStack: document.querySelector("#robot-stack"),
   messagePanel: document.querySelector("#message-panel"),
+  appMenu: document.querySelector(".app-menu"),
   newGameButton: document.querySelector("#new-game-button"),
   settingsButton: document.querySelector("#settings-button"),
   settingsDialog: document.querySelector("#settings-dialog"),
@@ -386,7 +387,13 @@ function renderPresents() {
 
 function renderStats(timestamp) {
   const bottomCoin = findCoin(state.robotStack[0]);
+  const purseCoins = state.coins.filter((coin) => coin.location === "purse");
   const bankCoins = state.coins.filter((coin) => coin.location === "bank");
+  const nextPurseDrop = state.nextPayAt === null ? null : state.nextPayAt - timestamp;
+  const nextPurseExpiry = purseCoins.reduce(
+    (soonest, coin) => Math.min(soonest, coin.expiresAt - timestamp),
+    Number.POSITIVE_INFINITY,
+  );
   const nextBankSplit = bankCoins.reduce(
     (soonest, coin) => Math.min(soonest, coin.nextSplitAt - timestamp),
     Number.POSITIVE_INFINITY,
@@ -399,7 +406,13 @@ function renderStats(timestamp) {
     Number.isFinite(nextBankSplit) ? ` (${formatSeconds(nextBankSplit)})` : ""
   }`;
   dom.presentStat.textContent = `${state.openedCount} / ${state.presents.length}`;
-  dom.lifeStat.textContent = `${state.wageCoinsIssued} / ${state.settings.lifetime}`;
+  dom.purseStat.textContent = `${purseCoins.length}${
+    Number.isFinite(nextPurseExpiry) ? ` (${formatSeconds(nextPurseExpiry)})` : ""
+  }${
+    nextPurseDrop === null
+      ? ` | ${state.wageCoinsIssued} / ${state.settings.lifetime}`
+      : ` | +${formatSeconds(nextPurseDrop)} | ${state.wageCoinsIssued} / ${state.settings.lifetime}`
+  }`;
 }
 
 function renderStatus() {
@@ -639,10 +652,12 @@ document.addEventListener("pointerdown", (event) => {
 });
 
 dom.newGameButton.addEventListener("click", () => {
+  dom.appMenu.open = false;
   newGame(state.settings);
 });
 
 dom.settingsButton.addEventListener("click", () => {
+  dom.appMenu.open = false;
   fillSettingsForm(state.settings);
   dom.settingsDialog.showModal();
 });
