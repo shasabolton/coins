@@ -234,7 +234,7 @@ h2 {
 .playfield {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: 1fr 1.15fr;
+  grid-template-rows: minmax(0, clamp(74px, 13dvh, 100px)) minmax(0, 1fr);
   gap: clamp(5px, 1dvh, 10px);
   min-height: 0;
 }
@@ -248,7 +248,7 @@ h2 {
 
 .zone--purse {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   background: linear-gradient(160deg, #fff6df, #ffe3b2);
 }
 
@@ -274,6 +274,12 @@ h2 {
   min-height: 0;
   padding: clamp(3px, 0.7dvh, 6px) clamp(7px, 2vw, 12px) clamp(5px, 0.9dvh, 10px);
   overflow: hidden;
+}
+
+#purse-coins {
+  align-items: center;
+  align-content: center;
+  flex-wrap: nowrap;
 }
 
 .coin-tray--bank {
@@ -384,7 +390,7 @@ h2 {
   width: clamp(68px, min(26vw, 17dvh), 112px);
   min-height: 0;
   height: 100%;
-  max-height: 124px;
+  max-height: none;
   padding: clamp(7px, 1.2dvh, 12px);
   border: 3px solid #5d86ba;
   border-radius: 16px 16px 24px 24px;
@@ -397,13 +403,13 @@ h2 {
   flex-direction: column-reverse;
   align-items: center;
   justify-content: end;
-  gap: clamp(2px, 0.55dvh, 4px);
+  gap: clamp(1px, 0.45dvh, 3px);
   overflow: hidden;
 }
 
 .robot-stack .coin {
-  width: clamp(18px, min(7.2vw, 4.5dvh), 34px);
-  height: clamp(18px, min(7.2vw, 4.5dvh), 34px);
+  width: clamp(16px, min(7vw, 4.2dvh), 30px);
+  height: clamp(16px, min(7vw, 4.2dvh), 30px);
   font-size: clamp(0.6rem, 2.8vw, 1rem);
   pointer-events: none;
 }
@@ -601,6 +607,10 @@ h2 {
 @media (max-height: 650px) {
   .zone-header p {
     display: none;
+  }
+
+  .zone--purse .zone-header p {
+    display: block;
   }
 
   .robot-head {
