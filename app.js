@@ -2,6 +2,7 @@ const DEFAULT_SETTINGS = {
   payrate: 10,
   depreciation: 5,
   feedrate: 4,
+  start: 2,
   interest: 60,
   presents: 9,
   lifetime: 10,
@@ -12,6 +13,7 @@ const PRESETS = {
     payrate: 8,
     depreciation: 7,
     feedrate: 5,
+    start: 3,
     interest: 40,
     presents: 7,
     lifetime: 12,
@@ -21,6 +23,7 @@ const PRESETS = {
     payrate: 12,
     depreciation: 4,
     feedrate: 3,
+    start: 1,
     interest: 75,
     presents: 10,
     lifetime: 8,
@@ -75,6 +78,7 @@ const dom = {
     payrate: document.querySelector("#payrate-input"),
     depreciation: document.querySelector("#depreciation-input"),
     feedrate: document.querySelector("#feedrate-input"),
+    start: document.querySelector("#start-input"),
     interest: document.querySelector("#interest-input"),
     presents: document.querySelector("#presents-input"),
     lifetime: document.querySelector("#lifetime-input"),
@@ -185,7 +189,10 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     openedCount: 0,
   };
 
-  createRobotCoin(timestamp);
+  for (let count = 0; count < settings.start; count += 1) {
+    createRobotCoin(timestamp);
+  }
+
   createPurseCoin(timestamp);
   render(timestamp);
 }
@@ -583,6 +590,7 @@ function fillSettingsForm(settings) {
   Object.entries(settings).forEach(([key, value]) => {
     dom.inputs[key].value = value;
   });
+  dom.inputs.start.setCustomValidity("");
 }
 
 function readSettingsForm() {
@@ -597,6 +605,14 @@ function readSettingsForm() {
 
     nextSettings[key] = Math.round(value);
   }
+
+  if (nextSettings.start > nextSettings.feedrate) {
+    dom.inputs.start.setCustomValidity("Start S cannot be greater than feedrate F.");
+    dom.inputs.start.reportValidity();
+    throw new Error("Start S cannot be greater than feedrate F.");
+  }
+
+  dom.inputs.start.setCustomValidity("");
 
   return nextSettings;
 }
@@ -651,15 +667,26 @@ dom.settingsForm.addEventListener("click", (event) => {
 
 dom.settingsForm.addEventListener("submit", (event) => {
   event.preventDefault();
+  dom.inputs.start.setCustomValidity("");
 
   if (!dom.settingsForm.reportValidity()) {
     return;
   }
 
-  const settings = readSettingsForm();
+  let settings;
+
+  try {
+    settings = readSettingsForm();
+  } catch {
+    return;
+  }
+
   dom.settingsDialog.close();
   newGame(settings);
 });
+
+dom.inputs.start.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
+dom.inputs.feedrate.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
 
 fillSettingsForm(DEFAULT_SETTINGS);
 newGame(DEFAULT_SETTINGS);

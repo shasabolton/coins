@@ -4,7 +4,7 @@ Investing game
 A coin drops into purse every P = 10s = payrate
 The coins shrinks and disappears in D= 5s = deprecation.
 
-Coins can be dragged into a robot characters mouth who can visibly hold F=4= feedrate stacked in his tummy. Only the bottom coin in the stack shrinks. When it is gone, the stack drops down to fill the space. When all coins have disappeared in his tummy he dies and the game is over. So the robot can live F*D seconds without more food.
+Coins can be dragged into a robot characters mouth who can visibly hold F=4= feedrate stacked in his tummy. The robot starts with S=2=start coins in his tummy. Only the bottom coin in the stack shrinks. When it is gone, the stack drops down to fill the space. When all coins have disappeared in his tummy he dies and the game is over. So the robot can live F*D seconds without more food when full.
 
 Coins can be dragged into a savings bank. Here they mitosis  split into 2 coins every I = 60 seconds = interest rate
 
@@ -14,7 +14,7 @@ There are only L= 10 coins = lifetime in a game.
 
 The goal of the game is to open all presents without dying or coming to the end of life.
 
-The game starts with one coin in the robot and one coin appearing in the purse. If you don't feed the robot first, he will die and the game will be over. You must then focus on keeping the robot alive while also investing coins in the bank so they can multiply. You then buy presents using coins from the bank. The point of the game is to teach kids to interpret that the value of a coin is not its spending power. It is its ability to produce passive income.
+The game starts with S coins in the robot and one coin appearing in the purse. If you don't feed the robot first, he will die and the game will be over. You must then focus on keeping the robot alive while also investing coins in the bank so they can multiply. You then buy presents using coins from the bank. The point of the game is to teach kids to interpret that the value of a coin is not its spending power. It is its ability to produce passive income.
 
 Layout
 Vertical phone screen.
