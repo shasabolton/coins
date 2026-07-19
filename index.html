@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Coins Investing Game</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="phone" aria-labelledby="game-title">
+      <section class="scoreboard" aria-live="polite">
+        <div>
+          <p class="eyebrow">Investing game</p>
+          <h1 id="game-title">Coins</h1>
+        </div>
+        <div class="status-pill" id="game-state">Playing</div>
+      </section>
+
+      <section class="stats" aria-label="Game status">
+        <div>
+          <span class="stat-label">Robot</span>
+          <strong id="robot-stat">0 / 0</strong>
+        </div>
+        <div>
+          <span class="stat-label">Bank</span>
+          <strong id="bank-stat">0</strong>
+        </div>
+        <div>
+          <span class="stat-label">Presents</span>
+          <strong id="present-stat">0 / 0</strong>
+        </div>
+        <div>
+          <span class="stat-label">Life</span>
+          <strong id="life-stat">0 / 0</strong>
+        </div>
+      </section>
+
+      <section class="zone zone--presents" aria-labelledby="presents-title">
+        <div class="zone-header">
+          <h2 id="presents-title">Wrapped presents</h2>
+          <p>Drop a coin on a gift to unwrap it.</p>
+        </div>
+        <div class="present-grid" id="present-grid"></div>
+      </section>
+
+      <section class="playfield" aria-label="Game board">
+        <section class="zone zone--purse" data-drop="purse" aria-labelledby="purse-title">
+          <div class="zone-header">
+            <h2 id="purse-title">Purse</h2>
+            <p id="purse-help">Coins arrive here, then shrink away.</p>
+          </div>
+          <div class="coin-tray" id="purse-coins"></div>
+        </section>
+
+        <section class="zone zone--bank" data-drop="bank" aria-labelledby="bank-title">
+          <div class="zone-header">
+            <h2 id="bank-title">Savings bank</h2>
+            <p>Coins in the bank split into two.</p>
+          </div>
+          <div class="coin-tray coin-tray--bank" id="bank-coins"></div>
+        </section>
+
+        <section class="zone zone--robot" data-drop="robot" aria-labelledby="robot-title">
+          <div class="zone-header">
+            <h2 id="robot-title">Robot</h2>
+            <p>Feed coins into his mouth to keep him alive.</p>
+          </div>
+          <div class="robot">
+            <div class="robot-head">
+              <span class="robot-eye"></span>
+              <span class="robot-mouth" aria-hidden="true"></span>
+              <span class="robot-eye"></span>
+            </div>
+            <div class="robot-body">
+              <div class="robot-stack" id="robot-stack"></div>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="message-panel" id="message-panel" aria-live="assertive">
+        Feed the robot first, then invest coins so they can make more coins.
+      </section>
+
+      <footer class="controls" aria-label="Game controls">
+        <button class="control-button" id="new-game-button" type="button">New game</button>
+        <button class="control-button" id="settings-button" type="button">Settings</button>
+      </footer>
+    </main>
+
+    <dialog class="settings-dialog" id="settings-dialog">
+      <form method="dialog" class="settings-form" id="settings-form">
+        <div class="settings-heading">
+          <div>
+            <p class="eyebrow">Difficulty</p>
+            <h2>Game settings</h2>
+          </div>
+          <button class="icon-button" type="button" aria-label="Close settings">x</button>
+        </div>
+
+        <div class="preset-row" aria-label="Preset difficulties">
+          <button type="button" class="preset-button" data-preset="easy">Easy</button>
+          <button type="button" class="preset-button" data-preset="medium">Medium</button>
+          <button type="button" class="preset-button" data-preset="hard">Hard</button>
+        </div>
+
+        <div class="settings-grid">
+          <label>
+            Payrate P (seconds)
+            <input id="payrate-input" name="payrate" type="number" min="1" max="120" step="1" required />
+          </label>
+          <label>
+            Depreciation D (seconds)
+            <input id="depreciation-input" name="depreciation" type="number" min="1" max="60" step="1" required />
+          </label>
+          <label>
+            Feedrate F (coins)
+            <input id="feedrate-input" name="feedrate" type="number" min="1" max="12" step="1" required />
+          </label>
+          <label>
+            Interest I (seconds)
+            <input id="interest-input" name="interest" type="number" min="2" max="300" step="1" required />
+          </label>
+          <label>
+            Presents G
+            <input id="presents-input" name="presents" type="number" min="1" max="24" step="1" required />
+          </label>
+          <label>
+            Lifetime L (wage coins)
+            <input id="lifetime-input" name="lifetime" type="number" min="1" max="50" step="1" required />
+          </label>
+        </div>
+
+        <menu class="dialog-actions">
+          <button type="button" class="secondary-button" id="reset-defaults-button">Defaults</button>
+          <button class="control-button" id="save-settings-button" value="save">Save and restart</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

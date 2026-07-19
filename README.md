@@ -24,3 +24,13 @@ Bottom left is the robot.
 Middle and bottom right is the bank.
 
 Make this app using vanila js client side only. The numbers can be altered with presets for easy, medium and hard game play. And can also be set manually for experimentation. This is done in a pop up when a settings button is pressed. There is also a new game button. These 2 buttons are at the bottom of the screen in a one row pannel.
+
+## Running the app
+
+Open `index.html` in a browser, or serve the folder with any static file server, for example:
+
+```sh
+python3 -m http.server 8000
+```
+
+Then visit `http://localhost:8000`.
