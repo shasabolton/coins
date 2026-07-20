@@ -1,9 +1,9 @@
 const DEFAULT_SETTINGS = {
   payrate: 5,
-  depreciation: 5,
+  depreciation: 1,
   feedrate: 4,
   start: 3,
-  interest: 20,
+  interest: 4,
   presents: 9,
   lifetime: 10,
 };
@@ -12,24 +12,25 @@ const PARTICLE_MIN_SPEED = 6;
 const PARTICLE_MAX_SPEED = 18;
 const PARTICLE_DAMPING = 0.996;
 const SPLIT_PUSH_SPEED = 30;
+const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 
 const PRESETS = {
   easy: {
     payrate: 8,
-    depreciation: 7,
+    depreciation: 1,
     feedrate: 5,
     start: 4,
-    interest: 40,
+    interest: 5,
     presents: 7,
     lifetime: 12,
   },
   medium: DEFAULT_SETTINGS,
   hard: {
     payrate: 12,
-    depreciation: 4,
+    depreciation: 0.5,
     feedrate: 3,
     start: 1,
-    interest: 75,
+    interest: 6.25,
     presents: 10,
     lifetime: 8,
   },
@@ -96,11 +97,11 @@ let drag = null;
 let lastHighlightedTarget = null;
 
 function depreciationMs() {
-  return state.settings.depreciation * 1000;
+  return state.settings.payrate * state.settings.depreciation * 1000;
 }
 
 function interestMs() {
-  return state.settings.interest * 1000;
+  return state.settings.payrate * state.settings.interest * 1000;
 }
 
 function payrateMs() {
@@ -1004,7 +1005,7 @@ function readSettingsForm() {
       throw new Error(`${key} must be a number.`);
     }
 
-    nextSettings[key] = Math.round(value);
+    nextSettings[key] = INTEGER_SETTING_KEYS.has(key) ? Math.round(value) : Number(value.toFixed(2));
   }
 
   if (nextSettings.start > nextSettings.feedrate) {
