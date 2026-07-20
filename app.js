@@ -953,14 +953,13 @@ function finishDrag(event) {
 
   const coinId = drag.id;
   const target = document.elementFromPoint(event.clientX, event.clientY);
-  const isRobotDrop = target?.closest("[data-drop]")?.dataset.drop === "robot";
   clearHighlightedTarget();
   drag.ghost.remove();
   drag = null;
   document.removeEventListener("pointermove", handlePointerMove);
   const didMoveToDifferentBox = handleDrop(coinId, target, gameNow(), event);
 
-  if (didMoveToDifferentBox && !isRobotDrop) {
+  if (didMoveToDifferentBox) {
     grantStaticStep();
   }
 
