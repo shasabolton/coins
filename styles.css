@@ -267,6 +267,7 @@ h2 {
 }
 
 .coin-tray {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-content: start;
@@ -282,10 +283,17 @@ h2 {
   flex-wrap: nowrap;
 }
 
+.coin-tray--particles .coin {
+  position: absolute;
+  left: var(--x, 50%);
+  top: var(--y, 50%);
+  transform: translate(-50%, -50%) scale(var(--scale));
+}
+
 .coin-tray--bank {
   align-content: start;
   max-height: 100%;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .coin-tray--bank .coin {
@@ -330,6 +338,10 @@ h2 {
   transform: scale(calc(var(--scale) * 1.06));
 }
 
+.coin-tray--particles .coin:hover {
+  transform: translate(-50%, -50%) scale(calc(var(--scale) * 1.06));
+}
+
 .coin.is-source {
   opacity: 0.22;
 }
@@ -342,7 +354,6 @@ h2 {
 }
 
 .coin.is-splitting {
-  --split-progress: 0;
   cursor: default;
   overflow: visible;
   z-index: 2;
@@ -364,15 +375,10 @@ h2 {
   z-index: 2;
 }
 
-.split-child {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  width: 100%;
-  height: 100%;
-  border-width: inherit;
+.split-child-particle {
+  z-index: 1;
+  opacity: 0.92;
   pointer-events: none;
-  transform: translate(calc(var(--split-progress) * 84%), calc(var(--split-progress) * -18%)) scale(0.96);
 }
 
 .coin-ghost {
