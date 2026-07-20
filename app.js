@@ -6,6 +6,7 @@ const DEFAULT_SETTINGS = {
   interest: 4,
   presents: 9,
   lifetime: 10,
+  staticMode: false,
 };
 
 const PARTICLE_MIN_SPEED = 6;
@@ -23,6 +24,7 @@ const PRESETS = {
     interest: 5,
     presents: 7,
     lifetime: 12,
+    staticMode: false,
   },
   medium: DEFAULT_SETTINGS,
   hard: {
@@ -33,6 +35,7 @@ const PRESETS = {
     interest: 6.25,
     presents: 10,
     lifetime: 8,
+    staticMode: false,
   },
 };
 
@@ -89,6 +92,7 @@ const dom = {
     interest: document.querySelector("#interest-input"),
     presents: document.querySelector("#presents-input"),
     lifetime: document.querySelector("#lifetime-input"),
+    staticMode: document.querySelector("#static-input"),
   },
 };
 
@@ -97,19 +101,23 @@ let drag = null;
 let lastHighlightedTarget = null;
 
 function depreciationMs() {
-  return state.settings.payrate * state.settings.depreciation * 1000;
+  return payrateMs() * state.settings.depreciation;
 }
 
 function interestMs() {
-  return state.settings.payrate * state.settings.interest * 1000;
+  return payrateMs() * state.settings.interest;
 }
 
 function payrateMs() {
-  return state.settings.payrate * 1000;
+  return (state.settings.staticMode ? 1 : state.settings.payrate) * 1000;
 }
 
 function formatSeconds(ms) {
   return `${Math.max(0, Math.ceil(ms / 1000))}s`;
+}
+
+function gameNow() {
+  return state?.gameTime ?? performance.now();
 }
 
 function clamp(value, min, max) {
@@ -205,6 +213,24 @@ function particleSize(location) {
 
 function particleRadius(location) {
   return particleSize(location) / 2;
+}
+
+function robotCoinSize() {
+  return clamp(Math.min(window.innerWidth * 0.07, window.innerHeight * 0.042), 16, 30);
+}
+
+function robotStackGap() {
+  return clamp(window.innerHeight * 0.0045, 1, 3);
+}
+
+function robotCoinScale(coin) {
+  const bottomCoinId = state.robotStack[0];
+
+  if (coin.id !== bottomCoinId) {
+    return 1;
+  }
+
+  return clamp(coin.remainingMs / depreciationMs(), 0.18, 1);
 }
 
 function particleArea(location) {
@@ -364,7 +390,7 @@ function resolveParticleCollision(a, b, area) {
   keepParticleInBounds(b.particle, area);
 }
 
-function updateParticleGroup(location, dt, timestamp) {
+function updateParticleGroup(location, dt, timestamp, gameTimestamp) {
   const { area, items } = particleItemsFor(location);
 
   for (const item of items) {
@@ -373,7 +399,7 @@ function updateParticleGroup(location, dt, timestamp) {
 
   for (const item of items) {
     if (item.kind === "split-child") {
-      pushSplitChildFromParent(item.coin, dt, timestamp);
+      pushSplitChildFromParent(item.coin, dt, gameTimestamp);
     }
   }
 
@@ -395,20 +421,60 @@ function updateParticlePhysics(timestamp) {
   const dt = clamp((timestamp - state.lastParticleTick) / 1000, 0, 0.05);
   state.lastParticleTick = timestamp;
 
-  updateParticleGroup("purse", dt, timestamp);
-  updateParticleGroup("bank", dt, timestamp);
+  updateParticleGroup("purse", dt, timestamp, gameNow());
+  updateParticleGroup("bank", dt, timestamp, gameNow());
+}
+
+function advanceGameClock(timestamp) {
+  if (state.lastClockTick === null) {
+    state.lastClockTick = timestamp;
+    return state.gameTime;
+  }
+
+  const elapsed = Math.max(0, timestamp - state.lastClockTick);
+  state.lastClockTick = timestamp;
+
+  if (state.status !== "playing") {
+    return state.gameTime;
+  }
+
+  if (!state.settings.staticMode) {
+    state.gameTime += elapsed;
+    return state.gameTime;
+  }
+
+  const advance = Math.min(elapsed, state.staticBudgetMs);
+  state.gameTime += advance;
+  state.staticBudgetMs -= advance;
+
+  return state.gameTime;
+}
+
+function grantStaticStep() {
+  if (!state.settings.staticMode || state.status !== "playing") {
+    return;
+  }
+
+  state.staticBudgetMs += payrateMs();
 }
 
 function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
   const timestamp = performance.now();
   const emojis = shuffle(EMOJIS);
+  const effectiveSettings = {
+    ...settings,
+    payrate: settings.staticMode ? 1 : settings.payrate,
+  };
 
   state = {
-    settings: { ...settings },
+    settings: effectiveSettings,
     coins: [],
     nextCoinId: 1,
     wageCoinsIssued: 0,
-    nextPayAt: timestamp + settings.payrate * 1000,
+    gameTime: timestamp,
+    lastClockTick: null,
+    staticBudgetMs: effectiveSettings.staticMode ? 1000 : 0,
+    nextPayAt: timestamp + effectiveSettings.payrate * 1000,
     robotStack: [],
     robotLastTick: timestamp,
     lastParticleTick: null,
@@ -625,16 +691,18 @@ function checkWinOrLoss() {
 }
 
 function tick(timestamp) {
+  const gameTimestamp = advanceGameClock(timestamp);
+
   if (state.status === "playing") {
-    processIncome(timestamp);
-    processPurse(timestamp);
-    processRobot(timestamp);
-    processBank(timestamp);
-    updateParticlePhysics(timestamp);
+    processIncome(gameTimestamp);
+    processPurse(gameTimestamp);
+    processRobot(gameTimestamp);
+    processBank(gameTimestamp);
     checkWinOrLoss();
   }
 
-  render(timestamp);
+  updateParticlePhysics(timestamp);
+  render(gameTimestamp);
   requestAnimationFrame(tick);
 }
 
@@ -661,8 +729,8 @@ function createCoinElement(coin, timestamp, location) {
     element.title = `Disappears in ${formatSeconds(coin.expiresAt - timestamp)}`;
   } else if (location === "robot") {
     const bottomCoinId = state.robotStack[0];
-    const scale = coin.id === bottomCoinId ? coin.remainingMs / depreciationMs() : 1;
-    element.style.setProperty("--scale", clamp(scale, 0.18, 1).toFixed(2));
+    const scale = robotCoinScale(coin);
+    element.style.setProperty("--scale", scale.toFixed(2));
     element.title =
       coin.id === bottomCoinId ? `Robot meal has ${formatSeconds(coin.remainingMs)} left` : "Waiting in robot stack";
 
@@ -699,6 +767,7 @@ function renderCoins(timestamp) {
   const purseFragment = document.createDocumentFragment();
   const bankFragment = document.createDocumentFragment();
   const robotFragment = document.createDocumentFragment();
+  let robotOffset = 0;
 
   for (const coin of state.coins) {
     if (coin.location === "purse") {
@@ -718,7 +787,11 @@ function renderCoins(timestamp) {
     const coin = findCoin(coinId);
 
     if (coin) {
-      robotFragment.append(createCoinElement(coin, timestamp, "robot"));
+      const scale = robotCoinScale(coin);
+      const element = createCoinElement(coin, timestamp, "robot");
+      element.style.setProperty("--robot-bottom", `${robotOffset}px`);
+      robotOffset += robotCoinSize() * scale + robotStackGap();
+      robotFragment.append(element);
     }
   }
 
@@ -786,6 +859,8 @@ function renderStatus() {
     dom.gameState.textContent = "Won";
   } else if (state.status === "lost") {
     dom.gameState.textContent = "Game over";
+  } else if (state.settings.staticMode && state.staticBudgetMs <= 0) {
+    dom.gameState.textContent = "Static pause";
   } else {
     dom.gameState.textContent = "Playing";
   }
@@ -882,7 +957,12 @@ function finishDrag(event) {
   drag.ghost.remove();
   drag = null;
   document.removeEventListener("pointermove", handlePointerMove);
-  handleDrop(coinId, target, performance.now(), event);
+  const didMoveToDifferentBox = handleDrop(coinId, target, gameNow(), event);
+
+  if (didMoveToDifferentBox) {
+    grantStaticStep();
+  }
+
   render();
 }
 
@@ -990,15 +1070,25 @@ function openPresent(coin, presentIndex) {
 
 function fillSettingsForm(settings) {
   Object.entries(settings).forEach(([key, value]) => {
-    dom.inputs[key].value = value;
+    if (dom.inputs[key].type === "checkbox") {
+      dom.inputs[key].checked = Boolean(value);
+    } else {
+      dom.inputs[key].value = value;
+    }
   });
   dom.inputs.start.setCustomValidity("");
+  updateStaticPayrateInput();
 }
 
 function readSettingsForm() {
   const nextSettings = {};
 
   for (const [key, input] of Object.entries(dom.inputs)) {
+    if (input.type === "checkbox") {
+      nextSettings[key] = input.checked;
+      continue;
+    }
+
     const value = Number(input.value);
 
     if (!Number.isFinite(value)) {
@@ -1006,6 +1096,10 @@ function readSettingsForm() {
     }
 
     nextSettings[key] = INTEGER_SETTING_KEYS.has(key) ? Math.round(value) : Number(value.toFixed(2));
+  }
+
+  if (nextSettings.staticMode) {
+    nextSettings.payrate = 1;
   }
 
   if (nextSettings.start > nextSettings.feedrate) {
@@ -1017,6 +1111,16 @@ function readSettingsForm() {
   dom.inputs.start.setCustomValidity("");
 
   return nextSettings;
+}
+
+function updateStaticPayrateInput() {
+  const isStatic = dom.inputs.staticMode.checked;
+
+  if (isStatic) {
+    dom.inputs.payrate.value = 1;
+  }
+
+  dom.inputs.payrate.disabled = isStatic;
 }
 
 document.addEventListener("pointerdown", (event) => {
@@ -1091,6 +1195,7 @@ dom.settingsForm.addEventListener("submit", (event) => {
 
 dom.inputs.start.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
 dom.inputs.feedrate.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
+dom.inputs.staticMode.addEventListener("input", updateStaticPayrateInput);
 
 fillSettingsForm(DEFAULT_SETTINGS);
 newGame(DEFAULT_SETTINGS);
