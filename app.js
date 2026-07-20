@@ -1,19 +1,21 @@
 const DEFAULT_SETTINGS = {
-  payrate: 10,
+  payrate: 5,
   depreciation: 5,
   feedrate: 4,
-  start: 2,
-  interest: 60,
+  start: 3,
+  interest: 20,
   presents: 9,
   lifetime: 10,
 };
+
+const SPLIT_DURATION_MS = 1100;
 
 const PRESETS = {
   easy: {
     payrate: 8,
     depreciation: 7,
     feedrate: 5,
-    start: 3,
+    start: 4,
     interest: 40,
     presents: 7,
     lifetime: 12,
@@ -128,6 +130,8 @@ function createCoin(location, timestamp) {
     createdAt: timestamp,
     expiresAt: null,
     nextSplitAt: null,
+    splitStartedAt: null,
+    splitCompletesAt: null,
     remainingMs: depreciationMs(),
   };
 
@@ -267,17 +271,32 @@ function processRobot(timestamp) {
 
 function processBank(timestamp) {
   const bankCoins = state.coins.filter((coin) => coin.location === "bank");
-  const newCoins = [];
+  let completedSplits = 0;
+  let startedSplits = 0;
 
   for (const coin of bankCoins) {
-    if (timestamp >= coin.nextSplitAt) {
+    if (drag?.id === coin.id) {
+      continue;
+    }
+
+    if (coin.splitCompletesAt !== null && timestamp >= coin.splitCompletesAt) {
+      createBankCoin(timestamp);
       coin.nextSplitAt = timestamp + interestMs();
-      newCoins.push(createBankCoin(timestamp));
+      coin.splitStartedAt = null;
+      coin.splitCompletesAt = null;
+      completedSplits += 1;
+    } else if (coin.splitCompletesAt === null && coin.nextSplitAt !== null && timestamp >= coin.nextSplitAt) {
+      coin.nextSplitAt = null;
+      coin.splitStartedAt = timestamp;
+      coin.splitCompletesAt = timestamp + SPLIT_DURATION_MS;
+      startedSplits += 1;
     }
   }
 
-  if (newCoins.length > 0) {
-    setMessage(`${newCoins.length} bank coin${newCoins.length === 1 ? "" : "s"} split into new coins.`);
+  if (completedSplits > 0) {
+    setMessage(`${completedSplits} bank coin${completedSplits === 1 ? "" : "s"} finished splitting.`);
+  } else if (startedSplits > 0) {
+    setMessage(`${startedSplits} bank coin${startedSplits === 1 ? " is" : "s are"} splitting.`);
   }
 }
 
@@ -337,7 +356,18 @@ function createCoinElement(coin, timestamp, location) {
       element.classList.add("is-bottom");
     }
   } else {
-    element.title = `Splits in ${formatSeconds(coin.nextSplitAt - timestamp)}`;
+    if (coin.splitCompletesAt !== null) {
+      const progress = clamp((timestamp - coin.splitStartedAt) / SPLIT_DURATION_MS, 0, 1);
+      const splitChild = document.createElement("span");
+      splitChild.className = "coin split-child";
+      splitChild.setAttribute("aria-hidden", "true");
+      element.classList.add("is-splitting");
+      element.style.setProperty("--split-progress", progress.toFixed(3));
+      element.title = `Splitting for ${formatSeconds(coin.splitCompletesAt - timestamp)}`;
+      element.append(splitChild);
+    } else {
+      element.title = `Splits in ${formatSeconds(coin.nextSplitAt - timestamp)}`;
+    }
   }
 
   return element;
@@ -395,7 +425,10 @@ function renderStats(timestamp) {
     Number.POSITIVE_INFINITY,
   );
   const nextBankSplit = bankCoins.reduce(
-    (soonest, coin) => Math.min(soonest, coin.nextSplitAt - timestamp),
+    (soonest, coin) => {
+      const nextEventAt = coin.splitCompletesAt ?? coin.nextSplitAt;
+      return Math.min(soonest, nextEventAt - timestamp);
+    },
     Number.POSITIVE_INFINITY,
   );
 
@@ -536,6 +569,10 @@ function handleDrop(coinId, target, timestamp) {
     return false;
   }
 
+  if (coin.splitCompletesAt !== null) {
+    return false;
+  }
+
   const presentElement = target?.closest(".present");
 
   if (presentElement) {
@@ -643,7 +680,7 @@ document.addEventListener("pointerdown", (event) => {
 
   const coin = findCoin(Number(coinElement.dataset.coinId));
 
-  if (!coin || coin.location === "robot") {
+  if (!coin || coin.location === "robot" || coin.splitCompletesAt !== null) {
     return;
   }
 
