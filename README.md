@@ -6,7 +6,7 @@ The coins shrinks and disappears in D= 5s = deprecation.
 
 Coins can be dragged into a robot characters mouth who can visibly hold F=4= feedrate stacked in his tummy. The robot starts with S=3=start coins in his tummy. Only the bottom coin in the stack shrinks. When it is gone, the stack drops down to fill the space. When all coins have disappeared in his tummy he dies and the game is over. So the robot can live F*D seconds without more food when full.
 
-Coins can be dragged into a savings bank. Here they mitosis  split into 2 coins every I = 20 seconds = interest rate
+Coins can be dragged into a savings bank. Here they visibly mitosis split as soon as they enter, and finish becoming 2 counted coins after I = 20 seconds = interest rate
 
 Coins can also be dragged into a present box with wrapped presents. When a coin is dragged over a present, it unwraps to reveal an emoji. The are G = 9 presents = gross domestic product.
 

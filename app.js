@@ -8,7 +8,6 @@ const DEFAULT_SETTINGS = {
   lifetime: 10,
 };
 
-const SPLIT_DURATION_MS = 1100;
 const PARTICLE_MIN_SPEED = 6;
 const PARTICLE_MAX_SPEED = 18;
 const PARTICLE_DAMPING = 0.996;
@@ -181,8 +180,8 @@ function createRobotCoin(timestamp) {
 
 function createBankCoin(timestamp, particle = null) {
   const coin = createCoin("bank", timestamp);
-  coin.nextSplitAt = timestamp + interestMs();
   coin.particle = particle;
+  beginSplit(coin, timestamp);
   return coin;
 }
 
@@ -373,7 +372,7 @@ function updateParticleGroup(location, dt, timestamp) {
 
   for (const item of items) {
     if (item.kind === "split-child") {
-      pushSplitChildFromParent(item.coin, dt);
+      pushSplitChildFromParent(item.coin, dt, timestamp);
     }
   }
 
@@ -529,47 +528,48 @@ function beginSplit(coin, timestamp) {
 
   coin.nextSplitAt = null;
   coin.splitStartedAt = timestamp;
-  coin.splitCompletesAt = timestamp + SPLIT_DURATION_MS;
+  coin.splitCompletesAt = timestamp + interestMs();
   coin.splitAngle = angle;
   coin.splitChildParticle = {
     x: parent.x,
     y: parent.y,
-    vx: parent.vx + pushX * SPLIT_PUSH_SPEED,
-    vy: parent.vy + pushY * SPLIT_PUSH_SPEED,
+    vx: parent.vx + pushX * (SPLIT_PUSH_SPEED * 0.2),
+    vy: parent.vy + pushY * (SPLIT_PUSH_SPEED * 0.2),
   };
 
-  parent.vx -= pushX * (SPLIT_PUSH_SPEED * 0.25);
-  parent.vy -= pushY * (SPLIT_PUSH_SPEED * 0.25);
+  parent.vx -= pushX * (SPLIT_PUSH_SPEED * 0.1);
+  parent.vy -= pushY * (SPLIT_PUSH_SPEED * 0.1);
   pushNearbyCoinsFromSplit(coin);
 }
 
-function pushSplitChildFromParent(coin, dt) {
+function splitProgress(coin, timestamp) {
+  if (coin.splitStartedAt === null || coin.splitCompletesAt === null) {
+    return 0;
+  }
+
+  return clamp((timestamp - coin.splitStartedAt) / (coin.splitCompletesAt - coin.splitStartedAt), 0, 1);
+}
+
+function pushSplitChildFromParent(coin, dt, timestamp) {
   if (!coin.splitChildParticle || !coin.particle) {
     return;
   }
 
   const child = coin.splitChildParticle;
   const parent = coin.particle;
-  const dx = child.x - parent.x;
-  const dy = child.y - parent.y;
-  const distance = Math.hypot(dx, dy);
-  const nx = distance === 0 ? Math.cos(coin.splitAngle) : dx / distance;
-  const ny = distance === 0 ? Math.sin(coin.splitAngle) : dy / distance;
-  const force = SPLIT_PUSH_SPEED * 2 * dt;
+  const progress = splitProgress(coin, timestamp);
+  const radius = particleRadius("bank");
+  const targetDistance = radius * 2.25 * progress;
+  const targetX = parent.x + Math.cos(coin.splitAngle) * targetDistance;
+  const targetY = parent.y + Math.sin(coin.splitAngle) * targetDistance;
+  const pullX = targetX - child.x;
+  const pullY = targetY - child.y;
+  const spring = 9 * dt;
 
-  child.vx += nx * force;
-  child.vy += ny * force;
-  parent.vx -= nx * force * 0.2;
-  parent.vy -= ny * force * 0.2;
-}
-
-function splitIsSeparated(coin) {
-  if (!coin.splitChildParticle || !coin.particle) {
-    return false;
-  }
-
-  const distance = Math.hypot(coin.splitChildParticle.x - coin.particle.x, coin.splitChildParticle.y - coin.particle.y);
-  return distance >= particleRadius("bank") * 2.08;
+  child.vx += pullX * spring;
+  child.vy += pullY * spring;
+  parent.vx -= pullX * spring * 0.04;
+  parent.vy -= pullY * spring * 0.04;
 }
 
 function completeSplit(coin, timestamp) {
@@ -578,35 +578,31 @@ function completeSplit(coin, timestamp) {
   };
 
   createBankCoin(timestamp, childParticle);
-  coin.nextSplitAt = timestamp + interestMs();
   coin.splitStartedAt = null;
   coin.splitCompletesAt = null;
   coin.splitChildParticle = null;
+  beginSplit(coin, timestamp);
 }
 
 function processBank(timestamp) {
   const bankCoins = state.coins.filter((coin) => coin.location === "bank");
   let completedSplits = 0;
-  let startedSplits = 0;
 
   for (const coin of bankCoins) {
     if (drag?.id === coin.id) {
       continue;
     }
 
-    if (coin.splitCompletesAt !== null && splitIsSeparated(coin)) {
+    if (coin.splitCompletesAt !== null && timestamp >= coin.splitCompletesAt) {
       completeSplit(coin, timestamp);
       completedSplits += 1;
-    } else if (coin.splitCompletesAt === null && coin.nextSplitAt !== null && timestamp >= coin.nextSplitAt) {
+    } else if (coin.splitCompletesAt === null) {
       beginSplit(coin, timestamp);
-      startedSplits += 1;
     }
   }
 
   if (completedSplits > 0) {
     setMessage(`${completedSplits} bank coin${completedSplits === 1 ? "" : "s"} finished splitting.`);
-  } else if (startedSplits > 0) {
-    setMessage(`${startedSplits} bank coin${startedSplits === 1 ? " is" : "s are"} splitting.`);
   }
 }
 
@@ -686,7 +682,7 @@ function createCoinElement(coin, timestamp, location) {
 }
 
 function createSplitChildElement(coin) {
-  if (!coin.splitChildParticle) {
+  if (!coin.splitChildParticle || drag?.id === coin.id) {
     return null;
   }
 
@@ -839,6 +835,15 @@ function startDrag(event, coin) {
   const ghost = document.createElement("div");
   ghost.className = "coin coin-ghost";
   ghost.setAttribute("aria-hidden", "true");
+
+  if (coin.splitChildParticle && coin.particle) {
+    const child = document.createElement("span");
+    child.className = "coin drag-split-child";
+    child.style.setProperty("--drag-child-x", `${coin.splitChildParticle.x - coin.particle.x}px`);
+    child.style.setProperty("--drag-child-y", `${coin.splitChildParticle.y - coin.particle.y}px`);
+    ghost.append(child);
+  }
+
   document.body.append(ghost);
 
   drag = {
@@ -900,10 +905,6 @@ function handleDrop(coinId, target, timestamp, event) {
     return false;
   }
 
-  if (coin.splitCompletesAt !== null) {
-    return false;
-  }
-
   const presentElement = target?.closest(".present");
 
   if (presentElement) {
@@ -961,11 +962,12 @@ function investCoin(coin, timestamp, event) {
 
   coin.location = "bank";
   coin.expiresAt = null;
-  coin.nextSplitAt = timestamp + interestMs();
+  coin.nextSplitAt = null;
   coin.splitStartedAt = null;
   coin.splitCompletesAt = null;
   coin.splitChildParticle = null;
   placeParticleFromEvent(coin, "bank", event);
+  beginSplit(coin, timestamp);
   setMessage("The coin is now invested in the savings bank.");
   return true;
 }
@@ -1029,7 +1031,7 @@ document.addEventListener("pointerdown", (event) => {
 
   const coin = findCoin(Number(coinElement.dataset.coinId));
 
-  if (!coin || coin.location === "robot" || coin.splitCompletesAt !== null) {
+  if (!coin || coin.location === "robot") {
     return;
   }
 

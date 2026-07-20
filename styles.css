@@ -354,7 +354,6 @@ h2 {
 }
 
 .coin.is-splitting {
-  cursor: default;
   overflow: visible;
   z-index: 2;
 }
@@ -384,8 +383,19 @@ h2 {
 .coin-ghost {
   position: fixed;
   z-index: 50;
+  overflow: visible;
   pointer-events: none;
   transform: translate(-50%, -50%) scale(1.15);
+}
+
+.drag-split-child {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 100%;
+  height: 100%;
+  opacity: 0.88;
+  transform: translate(calc(-50% + var(--drag-child-x, 0px)), calc(-50% + var(--drag-child-y, 0px))) scale(0.96);
 }
 
 .robot {
