@@ -473,7 +473,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     wageCoinsIssued: 0,
     gameTime: timestamp,
     lastClockTick: null,
-    staticBudgetMs: effectiveSettings.staticMode ? 1000 : 0,
+    staticBudgetMs: 0,
     nextPayAt: timestamp + effectiveSettings.payrate * 1000,
     robotStack: [],
     robotLastTick: timestamp,

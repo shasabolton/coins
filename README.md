@@ -16,7 +16,7 @@ The goal of the game is to open all presents without dying or coming to the end 
 
 The game starts with S coins in the robot and one coin appearing in the purse. If you don't feed the robot first, he will die and the game will be over. You must then focus on keeping the robot alive while also investing coins in the bank so they can multiply. You then buy presents using coins from the bank. The point of the game is to teach kids to interpret that the value of a coin is not its spending power. It is its ability to produce passive income.
 
-Static mode can be enabled in settings. In static mode P is set to 1 second and game time pauses after each P. Dragging a coin into a different box advances the game by one P, so shrink and split progress is counted in moves instead of real seconds. Particles keep floating while game time is paused.
+Static mode can be enabled in settings. In static mode P is set to 1 second and the game starts paused with one coin in the purse. Dragging a coin into a different box advances the game by one P, so shrink and split progress is counted in moves instead of real seconds. Particles keep floating while game time is paused.
 
 Layout
 Vertical phone screen.
