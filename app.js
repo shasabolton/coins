@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   presents: 9,
   lifetime: 10,
   staticMode: false,
+  noTimeFeeding: false,
 };
 
 const PARTICLE_MIN_SPEED = 6;
@@ -25,6 +26,7 @@ const PRESETS = {
     presents: 7,
     lifetime: 12,
     staticMode: false,
+    noTimeFeeding: false,
   },
   medium: DEFAULT_SETTINGS,
   hard: {
@@ -36,6 +38,7 @@ const PRESETS = {
     presents: 10,
     lifetime: 8,
     staticMode: false,
+    noTimeFeeding: false,
   },
 };
 
@@ -93,6 +96,7 @@ const dom = {
     presents: document.querySelector("#presents-input"),
     lifetime: document.querySelector("#lifetime-input"),
     staticMode: document.querySelector("#static-input"),
+    noTimeFeeding: document.querySelector("#no-time-feeding-input"),
   },
 };
 
@@ -438,6 +442,10 @@ function advanceGameClock(timestamp) {
     return state.gameTime;
   }
 
+  if (drag?.pausesGameTime) {
+    return state.gameTime;
+  }
+
   if (!state.settings.staticMode) {
     state.gameTime += elapsed;
     return state.gameTime;
@@ -456,6 +464,14 @@ function grantStaticStep() {
   }
 
   state.staticBudgetMs += payrateMs();
+}
+
+function chargePausedDragTime(dragInfo, timestamp) {
+  if (!dragInfo?.pausesGameTime || state.settings.staticMode) {
+    return;
+  }
+
+  state.gameTime += Math.max(0, timestamp - dragInfo.startedAt);
 }
 
 function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
@@ -925,6 +941,8 @@ function startDrag(event, coin) {
   drag = {
     id: coin.id,
     ghost,
+    startedAt: performance.now(),
+    pausesGameTime: state.settings.noTimeFeeding,
   };
 
   updateGhostPosition(event);
@@ -938,6 +956,7 @@ function cancelDrag() {
   clearHighlightedTarget();
 
   if (drag) {
+    chargePausedDragTime(drag, performance.now());
     drag.ghost.remove();
     drag = null;
   }
@@ -952,14 +971,26 @@ function finishDrag(event) {
   }
 
   const coinId = drag.id;
+  const dragInfo = drag;
+  const timestamp = performance.now();
   const target = document.elementFromPoint(event.clientX, event.clientY);
+  const isRobotDrop = target?.closest("[data-drop]")?.dataset.drop === "robot";
   clearHighlightedTarget();
   drag.ghost.remove();
   drag = null;
   document.removeEventListener("pointermove", handlePointerMove);
+
+  if (dragInfo.pausesGameTime && !state.settings.staticMode && !isRobotDrop) {
+    chargePausedDragTime(dragInfo, timestamp);
+  }
+
   const didMoveToDifferentBox = handleDrop(coinId, target, gameNow(), event);
 
-  if (didMoveToDifferentBox) {
+  if (dragInfo.pausesGameTime && !state.settings.staticMode && isRobotDrop && !didMoveToDifferentBox) {
+    chargePausedDragTime(dragInfo, timestamp);
+  }
+
+  if (didMoveToDifferentBox && !(state.settings.noTimeFeeding && isRobotDrop)) {
     grantStaticStep();
   }
 
