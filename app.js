@@ -462,6 +462,15 @@ function grantStaticStep() {
   state.staticBudgetMs += payrateMs();
 }
 
+function refillPurseAfterFreeFeed(timestamp) {
+  const coin = createPurseCoin(timestamp);
+  state.nextPayAt = timestamp + payrateMs();
+
+  if (coin) {
+    setMessage("The robot ate a coin and the purse refilled.");
+  }
+}
+
 function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
   const timestamp = performance.now();
   const emojis = shuffle(EMOJIS);
@@ -956,14 +965,22 @@ function finishDrag(event) {
   }
 
   const coinId = drag.id;
+  const coin = findCoin(coinId);
+  const sourceLocation = coin?.location;
   const target = document.elementFromPoint(event.clientX, event.clientY);
   const isRobotDrop = target?.closest("[data-drop]")?.dataset.drop === "robot";
+  const isFreeStaticFeed =
+    state.settings.staticMode && state.settings.noTimeFeeding && isRobotDrop && sourceLocation === "purse";
   clearHighlightedTarget();
   drag.ghost.remove();
   drag = null;
   document.removeEventListener("pointermove", handlePointerMove);
 
   const didMoveToDifferentBox = handleDrop(coinId, target, gameNow(), event);
+
+  if (didMoveToDifferentBox && isFreeStaticFeed) {
+    refillPurseAfterFreeFeed(gameNow());
+  }
 
   if (didMoveToDifferentBox && !(state.settings.staticMode && state.settings.noTimeFeeding && isRobotDrop)) {
     grantStaticStep();
