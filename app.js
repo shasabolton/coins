@@ -14,6 +14,7 @@ const PARTICLE_MIN_SPEED = 6;
 const PARTICLE_MAX_SPEED = 18;
 const PARTICLE_DAMPING = 0.996;
 const SPLIT_PUSH_SPEED = 30;
+const BANK_SPLIT_ANIMATION_MS = 1000;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 
 const PRESETS = {
@@ -194,7 +195,6 @@ function createRobotCoin(timestamp) {
 function createBankCoin(timestamp, particle = null) {
   const coin = createCoin("bank", timestamp);
   coin.particle = particle;
-  beginSplit(coin, timestamp);
   return coin;
 }
 
@@ -488,6 +488,9 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     lastClockTick: null,
     staticBudgetMs: 0,
     nextPayAt: timestamp + effectiveSettings.payrate * 1000,
+    bankNextSplitAt: timestamp + effectiveSettings.payrate * effectiveSettings.interest * 1000,
+    bankSplitStartedAt: null,
+    bankSplitCompletesAt: null,
     robotStack: [],
     robotLastTick: timestamp,
     lastParticleTick: null,
@@ -608,7 +611,7 @@ function beginSplit(coin, timestamp) {
 
   coin.nextSplitAt = null;
   coin.splitStartedAt = timestamp;
-  coin.splitCompletesAt = timestamp + interestMs();
+  coin.splitCompletesAt = timestamp + BANK_SPLIT_ANIMATION_MS;
   coin.splitAngle = angle;
   coin.splitChildParticle = {
     x: parent.x,
@@ -661,29 +664,54 @@ function completeSplit(coin, timestamp) {
   coin.splitStartedAt = null;
   coin.splitCompletesAt = null;
   coin.splitChildParticle = null;
-  beginSplit(coin, timestamp);
 }
 
 function processBank(timestamp) {
-  const bankCoins = state.coins.filter((coin) => coin.location === "bank");
-  let completedSplits = 0;
-
-  for (const coin of bankCoins) {
-    if (drag?.id === coin.id) {
-      continue;
+  if (state.bankSplitCompletesAt !== null) {
+    if (timestamp < state.bankSplitCompletesAt) {
+      return;
     }
 
-    if (coin.splitCompletesAt !== null && timestamp >= coin.splitCompletesAt) {
+    const splittingCoins = state.coins.filter((coin) => coin.location === "bank" && coin.splitChildParticle);
+
+    if (splittingCoins.some((coin) => drag?.id === coin.id)) {
+      return;
+    }
+
+    for (const coin of splittingCoins) {
       completeSplit(coin, timestamp);
-      completedSplits += 1;
-    } else if (coin.splitCompletesAt === null) {
-      beginSplit(coin, timestamp);
     }
+
+    state.bankSplitStartedAt = null;
+    state.bankSplitCompletesAt = null;
+    state.bankNextSplitAt = timestamp + interestMs();
+
+    if (splittingCoins.length > 0) {
+      setMessage(`${splittingCoins.length} bank coin${splittingCoins.length === 1 ? "" : "s"} finished splitting.`);
+    }
+
+    return;
   }
 
-  if (completedSplits > 0) {
-    setMessage(`${completedSplits} bank coin${completedSplits === 1 ? "" : "s"} finished splitting.`);
+  if (timestamp < state.bankNextSplitAt) {
+    return;
   }
+
+  const coinsToSplit = state.coins.filter((coin) => coin.location === "bank" && drag?.id !== coin.id);
+
+  if (coinsToSplit.length === 0) {
+    state.bankNextSplitAt = timestamp + interestMs();
+    return;
+  }
+
+  state.bankSplitStartedAt = timestamp;
+  state.bankSplitCompletesAt = timestamp + BANK_SPLIT_ANIMATION_MS;
+
+  for (const coin of coinsToSplit) {
+    beginSplit(coin, timestamp);
+  }
+
+  setMessage(`${coinsToSplit.length} bank coin${coinsToSplit.length === 1 ? " is" : "s are"} splitting.`);
 }
 
 function checkWinOrLoss() {
@@ -756,7 +784,7 @@ function createCoinElement(coin, timestamp, location) {
       element.title =
         timestamp < coin.splitCompletesAt ? `Splitting for ${formatSeconds(coin.splitCompletesAt - timestamp)}` : "Separating";
     } else {
-      element.title = `Splits in ${formatSeconds(coin.nextSplitAt - timestamp)}`;
+      element.title = `Bank splits in ${formatSeconds(state.bankNextSplitAt - timestamp)}`;
     }
   }
 
@@ -839,10 +867,7 @@ function renderStats(timestamp) {
     Number.POSITIVE_INFINITY,
   );
   const nextBankSplit = bankCoins.reduce(
-    (soonest, coin) => {
-      const nextEventAt = coin.splitCompletesAt ?? coin.nextSplitAt;
-      return Math.min(soonest, nextEventAt - timestamp);
-    },
+    (soonest) => Math.min(soonest, (state.bankSplitCompletesAt ?? state.bankNextSplitAt) - timestamp),
     Number.POSITIVE_INFINITY,
   );
 
@@ -1071,7 +1096,6 @@ function investCoin(coin, timestamp, event) {
   coin.splitCompletesAt = null;
   coin.splitChildParticle = null;
   placeParticleFromEvent(coin, "bank", event);
-  beginSplit(coin, timestamp);
   setMessage("The coin is now invested in the savings bank.");
   return true;
 }
