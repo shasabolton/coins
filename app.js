@@ -69,10 +69,8 @@ const EMOJIS = [
 
 const dom = {
   gameState: document.querySelector("#game-state"),
-  robotStat: document.querySelector("#robot-stat"),
-  bankStat: document.querySelector("#bank-stat"),
-  presentStat: document.querySelector("#present-stat"),
-  purseStat: document.querySelector("#purse-stat"),
+  bankTotal: document.querySelector("#bank-total"),
+  bankInterestProgress: document.querySelector("#bank-interest-progress"),
   presentGrid: document.querySelector("#present-grid"),
   purseCoins: document.querySelector("#purse-coins"),
   bankCoins: document.querySelector("#bank-coins"),
@@ -475,6 +473,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     lastClockTick: null,
     staticBudgetMs: 0,
     nextPayAt: timestamp + effectiveSettings.payrate * 1000,
+    bankCycleStartedAt: timestamp,
     bankNextSplitAt: timestamp + effectiveSettings.payrate * effectiveSettings.interest * 1000,
     bankSplitStartedAt: null,
     bankSplitCompletesAt: null,
@@ -678,6 +677,7 @@ function processBank(timestamp) {
 
     state.bankSplitStartedAt = null;
     state.bankSplitCompletesAt = null;
+    state.bankCycleStartedAt = timestamp;
     state.bankNextSplitAt = timestamp + interestMs();
 
     if (splittingCoins.length > 0) {
@@ -694,6 +694,7 @@ function processBank(timestamp) {
   const coinsToSplit = state.coins.filter((coin) => coin.location === "bank" && drag?.id !== coin.id);
 
   if (coinsToSplit.length === 0) {
+    state.bankCycleStartedAt = timestamp;
     state.bankNextSplitAt = timestamp + interestMs();
     return;
   }
@@ -852,33 +853,18 @@ function renderPresents() {
 }
 
 function renderStats(timestamp) {
-  const bottomCoin = findCoin(state.robotStack[0]);
-  const purseCoins = state.coins.filter((coin) => coin.location === "purse");
   const bankCoins = state.coins.filter((coin) => coin.location === "bank");
-  const nextPurseDrop = state.nextPayAt === null ? null : state.nextPayAt - timestamp;
-  const nextPurseExpiry = purseCoins.reduce(
-    (soonest, coin) => Math.min(soonest, coin.expiresAt - timestamp),
-    Number.POSITIVE_INFINITY,
-  );
-  const nextBankSplit = bankCoins.reduce(
-    (soonest) => Math.min(soonest, (state.bankSplitCompletesAt ?? state.bankNextSplitAt) - timestamp),
-    Number.POSITIVE_INFINITY,
-  );
+  let progress;
 
-  dom.robotStat.textContent = `${state.robotStack.length} / ${state.settings.feedrate}${
-    bottomCoin ? ` (${formatSeconds(bottomCoin.remainingMs)})` : ""
-  }`;
-  dom.bankStat.textContent = `${bankCoins.length}${
-    Number.isFinite(nextBankSplit) ? ` (${formatSeconds(nextBankSplit)})` : ""
-  }`;
-  dom.presentStat.textContent = `${state.openedCount} / ${state.presents.length}`;
-  dom.purseStat.textContent = `${purseCoins.length}${
-    Number.isFinite(nextPurseExpiry) ? ` (${formatSeconds(nextPurseExpiry)})` : ""
-  }${
-    nextPurseDrop === null
-      ? ` | ${state.wageCoinsIssued} / ${state.settings.lifetime}`
-      : ` | +${formatSeconds(nextPurseDrop)} | ${state.wageCoinsIssued} / ${state.settings.lifetime}`
-  }`;
+  if (state.bankSplitCompletesAt !== null) {
+    progress = 1;
+  } else {
+    const cycleLength = Math.max(1, state.bankNextSplitAt - state.bankCycleStartedAt);
+    progress = clamp((timestamp - state.bankCycleStartedAt) / cycleLength, 0, 1);
+  }
+
+  dom.bankTotal.textContent = `$${bankCoins.length}`;
+  dom.bankInterestProgress.style.setProperty("--progress", progress.toFixed(3));
 }
 
 function renderStatus() {

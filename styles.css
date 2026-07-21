@@ -152,42 +152,9 @@ h2 {
   z-index: 1;
 }
 
-.zone-header {
-  display: grid;
-  gap: 2px;
-  padding: clamp(5px, 0.9dvh, 10px) clamp(8px, 2.5vw, 14px) clamp(3px, 0.6dvh, 6px);
-}
-
-.zone-label {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 6px;
-  min-width: 0;
-}
-
-.zone-metric {
-  min-width: 0;
-  color: var(--ink);
-  font-size: clamp(0.66rem, min(2.8vw, 1.65dvh), 0.82rem);
-  font-weight: 900;
-  line-height: 1.1;
-  text-align: right;
-  white-space: normal;
-}
-
-.zone-header p {
-  max-width: none;
-  color: var(--muted);
-  font-size: clamp(0.58rem, min(2.5vw, 1.45dvh), 0.76rem);
-  line-height: 1.1;
-  text-align: left;
-  white-space: normal;
-}
-
 .zone--presents {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   background: linear-gradient(180deg, #fff8ed, #ffe9ef);
 }
 
@@ -248,7 +215,7 @@ h2 {
 
 .zone--purse {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   background: linear-gradient(160deg, #fff6df, #ffe3b2);
 }
 
@@ -262,8 +229,50 @@ h2 {
 
 .zone--robot {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: 1fr;
   background: linear-gradient(160deg, #edf4ff, #cfe2ff);
+}
+
+.bank-summary {
+  display: grid;
+  gap: 6px;
+  padding: clamp(7px, 1.2dvh, 12px) clamp(8px, 2.5vw, 14px) clamp(5px, 0.8dvh, 8px);
+}
+
+.bank-summary__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink);
+  font-size: clamp(0.66rem, min(2.8vw, 1.65dvh), 0.82rem);
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.bank-summary__row span {
+  min-width: 0;
+}
+
+.bank-summary__row strong {
+  flex: 0 0 auto;
+}
+
+.interest-progress {
+  height: clamp(6px, 1dvh, 9px);
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(45, 125, 81, 0.18);
+}
+
+.interest-progress span {
+  --progress: 0;
+  display: block;
+  width: calc(var(--progress) * 100%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--green-dark));
+  transition: width 120ms linear;
 }
 
 .coin-tray {
@@ -659,28 +668,9 @@ h2 {
     padding: 8px;
     gap: 5px;
   }
-
-  .zone-label {
-    align-items: start;
-    flex-direction: column;
-    gap: 1px;
-  }
-
-  .zone-metric,
-  .zone-header p {
-    text-align: left;
-  }
 }
 
 @media (max-height: 650px) {
-  .zone-header p {
-    display: none;
-  }
-
-  .zone--purse .zone-header p {
-    display: block;
-  }
-
   .robot-head {
     border-width: 2px;
   }
