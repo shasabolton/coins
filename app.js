@@ -3,7 +3,7 @@ const DEFAULT_SETTINGS = {
   depreciation: 1,
   feedrate: 4,
   start: 3,
-  interest: 6,
+  interest: 5,
   presents: 9,
   lifetime: 10,
   staticMode: true,
@@ -419,8 +419,11 @@ function updateParticlePhysics(timestamp) {
   const dt = clamp((timestamp - state.lastParticleTick) / 1000, 0, 0.05);
   state.lastParticleTick = timestamp;
 
+  const bankSplitTimestamp =
+    state.settings.staticMode && state.bankSplitRealStartedAt !== null ? timestamp : gameNow();
+
   updateParticleGroup("purse", dt, timestamp, gameNow());
-  updateParticleGroup("bank", dt, timestamp, gameNow());
+  updateParticleGroup("bank", dt, timestamp, bankSplitTimestamp);
 }
 
 function advanceGameClock(timestamp) {
@@ -477,6 +480,8 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     bankNextSplitAt: timestamp + effectiveSettings.payrate * effectiveSettings.interest * 1000,
     bankSplitStartedAt: null,
     bankSplitCompletesAt: null,
+    bankSplitRealStartedAt: null,
+    bankSplitRealCompletesAt: null,
     robotStack: [],
     robotLastTick: timestamp,
     robotPauseBudgetMs: 0,
@@ -659,9 +664,13 @@ function completeSplit(coin, timestamp) {
   coin.splitChildParticle = null;
 }
 
-function processBank(timestamp) {
+function processBank(timestamp, realTimestamp = timestamp) {
   if (state.bankSplitCompletesAt !== null) {
-    if (timestamp < state.bankSplitCompletesAt) {
+    const splitComplete = state.settings.staticMode
+      ? realTimestamp >= state.bankSplitRealCompletesAt
+      : timestamp >= state.bankSplitCompletesAt;
+
+    if (!splitComplete) {
       return;
     }
 
@@ -677,6 +686,8 @@ function processBank(timestamp) {
 
     state.bankSplitStartedAt = null;
     state.bankSplitCompletesAt = null;
+    state.bankSplitRealStartedAt = null;
+    state.bankSplitRealCompletesAt = null;
     state.bankCycleStartedAt = timestamp;
     state.bankNextSplitAt = timestamp + interestMs();
 
@@ -701,9 +712,11 @@ function processBank(timestamp) {
 
   state.bankSplitStartedAt = timestamp;
   state.bankSplitCompletesAt = timestamp + BANK_SPLIT_ANIMATION_MS;
+  state.bankSplitRealStartedAt = state.settings.staticMode ? realTimestamp : null;
+  state.bankSplitRealCompletesAt = state.settings.staticMode ? realTimestamp + BANK_SPLIT_ANIMATION_MS : null;
 
   for (const coin of coinsToSplit) {
-    beginSplit(coin, timestamp);
+    beginSplit(coin, state.settings.staticMode ? realTimestamp : timestamp);
   }
 
   setMessage(`${coinsToSplit.length} bank coin${coinsToSplit.length === 1 ? " is" : "s are"} splitting.`);
@@ -733,7 +746,7 @@ function tick(timestamp) {
     processIncome(gameTimestamp);
     processPurse(gameTimestamp);
     processRobot(gameTimestamp);
-    processBank(gameTimestamp);
+    processBank(gameTimestamp, timestamp);
     checkWinOrLoss();
   }
 
@@ -775,9 +788,13 @@ function createCoinElement(coin, timestamp, location) {
     }
   } else {
     if (coin.splitCompletesAt !== null) {
+      const splitTimestamp =
+        state.settings.staticMode && state.bankSplitRealStartedAt !== null ? performance.now() : timestamp;
       element.classList.add("is-splitting");
       element.title =
-        timestamp < coin.splitCompletesAt ? `Splitting for ${formatSeconds(coin.splitCompletesAt - timestamp)}` : "Separating";
+        splitTimestamp < coin.splitCompletesAt
+          ? `Splitting for ${formatSeconds(coin.splitCompletesAt - splitTimestamp)}`
+          : "Separating";
     } else {
       element.title = `Bank splits in ${formatSeconds(state.bankNextSplitAt - timestamp)}`;
     }
@@ -1143,14 +1160,14 @@ function updateStaticPayrateInput(applyDefaults = false) {
   if (isStatic) {
     dom.inputs.payrate.value = 1;
     if (applyDefaults) {
-      dom.inputs.interest.value = 6;
+      dom.inputs.interest.value = 5;
     }
   } else if (applyDefaults) {
     if (Number(dom.inputs.payrate.value) === 1) {
       dom.inputs.payrate.value = 5;
     }
 
-    if (Number(dom.inputs.interest.value) === 6) {
+    if (Number(dom.inputs.interest.value) === 5) {
       dom.inputs.interest.value = 4;
     }
   }
