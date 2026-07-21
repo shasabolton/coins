@@ -18,7 +18,7 @@ The game starts with S coins in the robot and one coin appearing in the purse. I
 
 Static mode can be enabled in settings. In static mode P is set to 1 second and the game starts paused with one coin in the purse. Dragging a coin into a different box advances the game by one P, so shrink and split progress is counted in moves instead of real seconds. Particles keep floating while game time is paused.
 
-Settings also include an optional "feeding costs no time" checkbox. When enabled, successful robot feeds do not advance static time and the feed drag itself does not cost dynamic game time.
+Settings also include an optional static-mode "feeding costs no time" checkbox. When enabled, successful robot feeds do not advance static time.
 
 Layout
 Vertical phone screen.

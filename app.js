@@ -442,10 +442,6 @@ function advanceGameClock(timestamp) {
     return state.gameTime;
   }
 
-  if (drag?.pausesGameTime) {
-    return state.gameTime;
-  }
-
   if (!state.settings.staticMode) {
     state.gameTime += elapsed;
     return state.gameTime;
@@ -464,14 +460,6 @@ function grantStaticStep() {
   }
 
   state.staticBudgetMs += payrateMs();
-}
-
-function chargePausedDragTime(dragInfo, timestamp) {
-  if (!dragInfo?.pausesGameTime || state.settings.staticMode) {
-    return;
-  }
-
-  state.gameTime += Math.max(0, timestamp - dragInfo.startedAt);
 }
 
 function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
@@ -941,8 +929,6 @@ function startDrag(event, coin) {
   drag = {
     id: coin.id,
     ghost,
-    startedAt: performance.now(),
-    pausesGameTime: state.settings.noTimeFeeding,
   };
 
   updateGhostPosition(event);
@@ -956,7 +942,6 @@ function cancelDrag() {
   clearHighlightedTarget();
 
   if (drag) {
-    chargePausedDragTime(drag, performance.now());
     drag.ghost.remove();
     drag = null;
   }
@@ -971,8 +956,6 @@ function finishDrag(event) {
   }
 
   const coinId = drag.id;
-  const dragInfo = drag;
-  const timestamp = performance.now();
   const target = document.elementFromPoint(event.clientX, event.clientY);
   const isRobotDrop = target?.closest("[data-drop]")?.dataset.drop === "robot";
   clearHighlightedTarget();
@@ -980,17 +963,9 @@ function finishDrag(event) {
   drag = null;
   document.removeEventListener("pointermove", handlePointerMove);
 
-  if (dragInfo.pausesGameTime && !state.settings.staticMode && !isRobotDrop) {
-    chargePausedDragTime(dragInfo, timestamp);
-  }
-
   const didMoveToDifferentBox = handleDrop(coinId, target, gameNow(), event);
 
-  if (dragInfo.pausesGameTime && !state.settings.staticMode && isRobotDrop && !didMoveToDifferentBox) {
-    chargePausedDragTime(dragInfo, timestamp);
-  }
-
-  if (didMoveToDifferentBox && !(state.settings.noTimeFeeding && isRobotDrop)) {
+  if (didMoveToDifferentBox && !(state.settings.staticMode && state.settings.noTimeFeeding && isRobotDrop)) {
     grantStaticStep();
   }
 
