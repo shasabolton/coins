@@ -462,15 +462,6 @@ function grantStaticStep() {
   state.staticBudgetMs += payrateMs();
 }
 
-function refillPurseAfterFreeFeed(timestamp) {
-  const coin = createPurseCoin(timestamp);
-  state.nextPayAt = timestamp + payrateMs();
-
-  if (coin) {
-    setMessage("The robot ate a coin and the purse refilled.");
-  }
-}
-
 function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
   const timestamp = performance.now();
   const emojis = shuffle(EMOJIS);
@@ -493,6 +484,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     bankSplitCompletesAt: null,
     robotStack: [],
     robotLastTick: timestamp,
+    robotPauseBudgetMs: 0,
     lastParticleTick: null,
     status: "playing",
     message: "Feed the robot first, then invest coins so they can make more coins.",
@@ -552,6 +544,12 @@ function processPurse(timestamp) {
 function processRobot(timestamp) {
   let elapsed = timestamp - state.robotLastTick;
   state.robotLastTick = timestamp;
+
+  if (state.robotPauseBudgetMs > 0) {
+    const pausedElapsed = Math.min(elapsed, state.robotPauseBudgetMs);
+    state.robotPauseBudgetMs -= pausedElapsed;
+    elapsed -= pausedElapsed;
+  }
 
   while (elapsed > 0) {
     const bottomCoinId = state.robotStack[0];
@@ -990,12 +988,9 @@ function finishDrag(event) {
   }
 
   const coinId = drag.id;
-  const coin = findCoin(coinId);
-  const sourceLocation = coin?.location;
   const target = document.elementFromPoint(event.clientX, event.clientY);
   const isRobotDrop = target?.closest("[data-drop]")?.dataset.drop === "robot";
-  const isFreeStaticFeed =
-    state.settings.staticMode && state.settings.noTimeFeeding && isRobotDrop && sourceLocation === "purse";
+  const pausesRobotDepreciation = state.settings.staticMode && state.settings.noTimeFeeding && isRobotDrop;
   clearHighlightedTarget();
   drag.ghost.remove();
   drag = null;
@@ -1003,11 +998,11 @@ function finishDrag(event) {
 
   const didMoveToDifferentBox = handleDrop(coinId, target, gameNow(), event);
 
-  if (didMoveToDifferentBox && isFreeStaticFeed) {
-    refillPurseAfterFreeFeed(gameNow());
+  if (didMoveToDifferentBox && pausesRobotDepreciation) {
+    state.robotPauseBudgetMs += payrateMs();
   }
 
-  if (didMoveToDifferentBox && !(state.settings.staticMode && state.settings.noTimeFeeding && isRobotDrop)) {
+  if (didMoveToDifferentBox) {
     grantStaticStep();
   }
 
