@@ -3,7 +3,7 @@ const DEFAULT_SETTINGS = {
   depreciation: 1,
   feedrate: 4,
   start: 3,
-  interest: 5,
+  interest: 7,
   presents: 9,
   lifetime: 10,
   staticMode: true,
@@ -1160,14 +1160,14 @@ function updateStaticPayrateInput(applyDefaults = false) {
   if (isStatic) {
     dom.inputs.payrate.value = 1;
     if (applyDefaults) {
-      dom.inputs.interest.value = 5;
+      dom.inputs.interest.value = 7;
     }
   } else if (applyDefaults) {
     if (Number(dom.inputs.payrate.value) === 1) {
       dom.inputs.payrate.value = 5;
     }
 
-    if (Number(dom.inputs.interest.value) === 5) {
+    if (Number(dom.inputs.interest.value) === 7) {
       dom.inputs.interest.value = 4;
     }
   }
