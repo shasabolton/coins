@@ -1,13 +1,12 @@
 const DEFAULT_SETTINGS = {
-  payrate: 5,
+  payrate: 1,
   depreciation: 1,
   feedrate: 4,
   start: 3,
-  interest: 4,
+  interest: 6,
   presents: 9,
   lifetime: 10,
-  staticMode: false,
-  noTimeFeeding: false,
+  staticMode: true,
 };
 
 const PARTICLE_MIN_SPEED = 6;
@@ -27,7 +26,6 @@ const PRESETS = {
     presents: 7,
     lifetime: 12,
     staticMode: false,
-    noTimeFeeding: false,
   },
   medium: DEFAULT_SETTINGS,
   hard: {
@@ -39,7 +37,6 @@ const PRESETS = {
     presents: 10,
     lifetime: 8,
     staticMode: false,
-    noTimeFeeding: false,
   },
 };
 
@@ -97,7 +94,6 @@ const dom = {
     presents: document.querySelector("#presents-input"),
     lifetime: document.querySelector("#lifetime-input"),
     staticMode: document.querySelector("#static-input"),
-    noTimeFeeding: document.querySelector("#no-time-feeding-input"),
   },
 };
 
@@ -990,7 +986,7 @@ function finishDrag(event) {
   const coinId = drag.id;
   const target = document.elementFromPoint(event.clientX, event.clientY);
   const isRobotDrop = target?.closest("[data-drop]")?.dataset.drop === "robot";
-  const pausesRobotDepreciation = state.settings.staticMode && state.settings.noTimeFeeding && isRobotDrop;
+  const pausesRobotDepreciation = state.settings.staticMode && isRobotDrop;
   clearHighlightedTarget();
   drag.ghost.remove();
   drag = null;
@@ -1155,11 +1151,22 @@ function readSettingsForm() {
   return nextSettings;
 }
 
-function updateStaticPayrateInput() {
+function updateStaticPayrateInput(applyDefaults = false) {
   const isStatic = dom.inputs.staticMode.checked;
 
   if (isStatic) {
     dom.inputs.payrate.value = 1;
+    if (applyDefaults) {
+      dom.inputs.interest.value = 6;
+    }
+  } else if (applyDefaults) {
+    if (Number(dom.inputs.payrate.value) === 1) {
+      dom.inputs.payrate.value = 5;
+    }
+
+    if (Number(dom.inputs.interest.value) === 6) {
+      dom.inputs.interest.value = 4;
+    }
   }
 
   dom.inputs.payrate.disabled = isStatic;
@@ -1237,7 +1244,7 @@ dom.settingsForm.addEventListener("submit", (event) => {
 
 dom.inputs.start.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
 dom.inputs.feedrate.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
-dom.inputs.staticMode.addEventListener("input", updateStaticPayrateInput);
+dom.inputs.staticMode.addEventListener("input", () => updateStaticPayrateInput(true));
 
 fillSettingsForm(DEFAULT_SETTINGS);
 newGame(DEFAULT_SETTINGS);

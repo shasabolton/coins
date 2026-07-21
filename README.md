@@ -1,12 +1,12 @@
 # coins
 
 Investing game
-A coin drops into purse every P = 5s = payrate
+A coin drops into purse every P = 1s in static mode, or P = 5s by default in dynamic mode = payrate
 The coins shrinks and disappears in D= 1*P = deprecation.
 
 Coins can be dragged into a robot characters mouth who can visibly hold F=4= feedrate stacked in his tummy. The robot starts with S=3=start coins in his tummy. Only the bottom coin in the stack shrinks. When it is gone, the stack drops down to fill the space. When all coins have disappeared in his tummy he dies and the game is over. So the robot can live F*D*P seconds without more food when full.
 
-Coins can be dragged into a savings bank. The whole bank shares one interest clock: every I = 4*P = interest rate, whatever coins are in the bank split in two. The split is animated over 1 second, and new coins count only when the animation completes.
+Coins can be dragged into a savings bank. The whole bank shares one interest clock: every I = 6*P in static mode, or I = 4*P by default in dynamic mode = interest rate, whatever coins are in the bank split in two. The split is animated over 1 second, and new coins count only when the animation completes.
 
 Coins can also be dragged into a present box with wrapped presents. When a coin is dragged over a present, it unwraps to reveal an emoji. The are G = 9 presents = gross domestic product.
 
@@ -16,9 +16,7 @@ The goal of the game is to open all presents without dying or coming to the end 
 
 The game starts with S coins in the robot and one coin appearing in the purse. If you don't feed the robot first, he will die and the game will be over. You must then focus on keeping the robot alive while also investing coins in the bank so they can multiply. You then buy presents using coins from the bank. The point of the game is to teach kids to interpret that the value of a coin is not its spending power. It is its ability to produce passive income.
 
-Static mode can be enabled in settings. In static mode P is set to 1 second and the game starts paused with one coin in the purse. Dragging a coin into a different box advances the game by one P, so shrink and split progress is counted in moves instead of real seconds. Particles keep floating while game time is paused.
-
-Settings also include an optional static-mode "feeding costs no time" checkbox. When enabled, successful robot feeds still advance static time for the purse and bank, but robot tummy depreciation is paused for that step.
+Static mode is enabled by default in settings. In static mode P is set to 1 second and the game starts paused with one coin in the purse. Dragging a coin into a different box advances the game by one P, so shrink and split progress is counted in moves instead of real seconds. Particles keep floating while game time is paused. Successful robot feeds still advance static time for the purse and bank, but robot tummy depreciation is paused for that step.
 
 Layout
 Vertical phone screen.
