@@ -589,14 +589,16 @@ h2 {
   --robot-body-width: clamp(68px, min(26vw, 17dvh), 112px);
   --robot-body-padding: clamp(4px, 0.7dvh, 6px);
   --robot-coin-size: clamp(16px, min(7vw, 4.2dvh), 30px);
+  --robot-neck-height: 10px;
+  --robot-neck-width: 24px;
   --robot-stack-gap: clamp(1px, 0.45dvh, 3px);
   --robot-head-font-size: 54px;
   --robot-stack-height: 129px;
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: auto auto auto;
   align-content: center;
   justify-items: center;
-  gap: clamp(2px, 0.4dvh, 4px);
+  gap: 0;
   height: 100%;
   min-height: 0;
   padding: 0 clamp(6px, 2vw, 12px) clamp(6px, 1dvh, 14px);
@@ -610,6 +612,14 @@ h2 {
   font-size: var(--robot-head-font-size);
   line-height: 1;
   filter: drop-shadow(0 6px 8px rgba(58, 105, 160, 0.2));
+}
+
+.robot-neck {
+  width: var(--robot-neck-width);
+  height: var(--robot-neck-height);
+  border-radius: 999px 999px 0 0;
+  background: var(--blue);
+  box-shadow: inset 0 -4px 7px rgba(44, 65, 88, 0.18);
 }
 
 .robot-body {
@@ -660,6 +670,154 @@ h2 {
 .message-panel.is-won {
   color: #7d5a00;
   background: #fff5d5;
+}
+
+.result-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: clamp(18px, 5vw, 34px);
+  background:
+    radial-gradient(circle at 50% 40%, rgba(255, 240, 194, 0.82), transparent 18rem),
+    rgba(37, 27, 19, 0.32);
+  backdrop-filter: blur(5px);
+  animation: result-overlay-fade 480ms ease forwards;
+}
+
+.result-overlay[hidden] {
+  display: none;
+}
+
+.result-card {
+  width: min(92vw, 390px);
+  display: grid;
+  gap: clamp(8px, 1.4dvh, 14px);
+  padding: clamp(22px, 6vw, 34px);
+  border: 3px solid rgba(37, 27, 19, 0.12);
+  border-radius: 34px;
+  background: rgba(255, 250, 241, 0.96);
+  color: var(--ink);
+  box-shadow: 0 28px 70px rgba(37, 27, 19, 0.32);
+  text-align: center;
+  transform-origin: center;
+  animation: result-card-pop 900ms cubic-bezier(0.18, 1.2, 0.22, 1) forwards;
+}
+
+.result-card.is-lost {
+  background: linear-gradient(180deg, #fff8ed, #ffe9e6);
+}
+
+.result-card.is-won {
+  background: linear-gradient(180deg, #fffaf1, #fff0c2);
+}
+
+.result-kicker {
+  color: var(--muted);
+  font-size: clamp(0.72rem, min(3.3vw, 1.9dvh), 0.9rem);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.result-title {
+  font-size: clamp(2.45rem, min(15vw, 8.5dvh), 4.7rem);
+  line-height: 0.86;
+  letter-spacing: -0.08em;
+}
+
+.result-card.is-lost .result-title {
+  color: #a43d36;
+  animation: result-title-shake 820ms ease-in-out 260ms both;
+}
+
+.result-card.is-won .result-title {
+  color: #8a5d00;
+  animation: result-title-bounce 1200ms ease-in-out 220ms both;
+}
+
+.result-message {
+  font-size: clamp(1.08rem, min(5vw, 3dvh), 1.55rem);
+  font-weight: 900;
+  line-height: 1.05;
+}
+
+.result-detail {
+  color: var(--muted);
+  font-size: clamp(0.86rem, min(3.6vw, 2dvh), 1rem);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.result-button {
+  min-height: 48px;
+  margin-top: clamp(4px, 1dvh, 10px);
+  border: 0;
+  border-radius: 18px;
+  background: var(--ink);
+  color: #fff;
+  font-weight: 900;
+  box-shadow: 0 10px 22px rgba(37, 27, 19, 0.22);
+}
+
+@keyframes result-overlay-fade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes result-card-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(28px) scale(0.82) rotate(-2deg);
+  }
+
+  62% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1.04) rotate(1deg);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+}
+
+@keyframes result-title-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  20%,
+  60% {
+    transform: translateX(-5px) rotate(-1deg);
+  }
+
+  40%,
+  80% {
+    transform: translateX(5px) rotate(1deg);
+  }
+}
+
+@keyframes result-title-bounce {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+
+  35% {
+    transform: translateY(-8px) scale(1.05);
+  }
+
+  70% {
+    transform: translateY(2px) scale(0.98);
+  }
 }
 
 .control-button,

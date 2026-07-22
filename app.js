@@ -78,6 +78,13 @@ const dom = {
   bankCoins: document.querySelector("#bank-coins"),
   robot: document.querySelector(".robot"),
   robotStack: document.querySelector("#robot-stack"),
+  resultOverlay: document.querySelector("#result-overlay"),
+  resultCard: document.querySelector(".result-card"),
+  resultKicker: document.querySelector("#result-kicker"),
+  resultTitle: document.querySelector("#result-title"),
+  resultMessage: document.querySelector("#result-message"),
+  resultDetail: document.querySelector("#result-detail"),
+  resultNewGameButton: document.querySelector("#result-new-game-button"),
   messagePanel: document.querySelector("#message-panel"),
   appMenu: document.querySelector(".app-menu"),
   newGameButton: document.querySelector("#new-game-button"),
@@ -232,12 +239,16 @@ function robotHeadFontSize() {
   return robotBodyWidth() * 0.78;
 }
 
-function robotBodyPadding() {
-  return clamp(window.innerHeight * 0.007, 4, 6);
+function robotNeckWidth() {
+  return clamp(robotBodyWidth() * 0.26, 18, 30);
 }
 
-function robotGap() {
-  return clamp(window.innerHeight * 0.004, 2, 4);
+function robotNeckHeight() {
+  return clamp(window.innerHeight * 0.012, 7, 12);
+}
+
+function robotBodyPadding() {
+  return clamp(window.innerHeight * 0.007, 4, 6);
 }
 
 function robotStackGap() {
@@ -258,7 +269,7 @@ function robotAvailableStackHeight() {
 
   return Math.max(
     0,
-    dom.robot.clientHeight - robotBodyWidth() - robotGap() - robotBodyPadding() * 2 - bodyBorderHeight - robotBottomPadding,
+    dom.robot.clientHeight - robotBodyWidth() - robotNeckHeight() - robotBodyPadding() * 2 - bodyBorderHeight - robotBottomPadding,
   );
 }
 
@@ -551,6 +562,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     robotPauseBudgetMs: 0,
     lastParticleTick: null,
     status: "playing",
+    resultReason: null,
     message: "Feed the robot first, then invest coins so they can make more coins.",
     presents: Array.from({ length: settings.presents }, (_, index) => ({
       emoji: emojis[index % emojis.length],
@@ -574,13 +586,18 @@ function setMessage(message) {
   state.message = message;
 }
 
-function endGame(status, message) {
+function bankCoinCount() {
+  return state.coins.filter((coin) => coin.location === "bank").length;
+}
+
+function endGame(status, reason) {
   if (state.status !== "playing") {
     return;
   }
 
   state.status = status;
-  state.message = message;
+  state.resultReason = reason;
+  state.message = resultMessageForState().message;
 }
 
 function processIncome(timestamp) {
@@ -623,7 +640,7 @@ function processRobot(timestamp) {
     const bottomCoin = findCoin(bottomCoinId);
 
     if (!bottomCoin) {
-      endGame("lost", "The robot ran out of coins and shut down. Game over.");
+      endGame("lost", "starved");
       return;
     }
 
@@ -637,7 +654,7 @@ function processRobot(timestamp) {
     removeCoin(bottomCoin.id);
 
     if (state.robotStack.length === 0) {
-      endGame("lost", "The robot ran out of coins and shut down. Game over.");
+      endGame("lost", "starved");
       return;
     }
   }
@@ -791,7 +808,7 @@ function processBank(timestamp, realTimestamp = timestamp) {
 
 function checkWinOrLoss() {
   if (state.openedCount === state.presents.length) {
-    endGame("won", "You opened every present and kept the robot alive. You win!");
+    endGame("won", "presents");
     return;
   }
 
@@ -802,7 +819,7 @@ function checkWinOrLoss() {
     spendableCoins.length === 0 &&
     state.openedCount < state.presents.length
   ) {
-    endGame("lost", "The lifetime wage coins are gone and there are no spendable coins left. Game over.");
+    endGame("lost", "money");
   }
 }
 
@@ -923,6 +940,8 @@ function renderCoins(timestamp) {
 function renderRobotSizing() {
   dom.robot.style.setProperty("--robot-body-width", `${robotBodyWidth()}px`);
   dom.robot.style.setProperty("--robot-head-font-size", `${robotHeadFontSize()}px`);
+  dom.robot.style.setProperty("--robot-neck-width", `${robotNeckWidth()}px`);
+  dom.robot.style.setProperty("--robot-neck-height", `${robotNeckHeight()}px`);
   dom.robot.style.setProperty("--robot-coin-size", `${robotCoinSize()}px`);
   dom.robot.style.setProperty("--robot-stack-gap", `${robotStackGap()}px`);
   dom.robot.style.setProperty("--robot-stack-height", `${robotStackHeight()}px`);
@@ -987,12 +1006,60 @@ function renderStatus() {
   dom.messagePanel.textContent = state.message;
 }
 
+function resultMessageForState() {
+  if (state.status === "won") {
+    const bankTotal = bankCoinCount();
+
+    return {
+      kicker: "All presents opened",
+      title: "Well Done!",
+      message: `You opened all the presents and have $${bankTotal} in the bank.`,
+      detail: "You kept the robot fed while your invested coins made more coins.",
+    };
+  }
+
+  if (state.resultReason === "money") {
+    return {
+      kicker: "Out of money",
+      title: "Game Over",
+      message: "You ran out of money.",
+      detail: "All lifetime wage coins are gone and there are no spendable coins left.",
+    };
+  }
+
+  return {
+    kicker: "Robot starved",
+    title: "Game Over",
+    message: "The robot starved.",
+    detail: "Keep coins stacked in his tummy so he does not run out of food.",
+  };
+}
+
+function renderResultOverlay() {
+  if (state.status === "playing") {
+    dom.resultOverlay.hidden = true;
+    dom.resultCard.classList.remove("is-lost", "is-won");
+    return;
+  }
+
+  const result = resultMessageForState();
+
+  dom.resultCard.classList.toggle("is-lost", state.status === "lost");
+  dom.resultCard.classList.toggle("is-won", state.status === "won");
+  dom.resultKicker.textContent = result.kicker;
+  dom.resultTitle.textContent = result.title;
+  dom.resultMessage.textContent = result.message;
+  dom.resultDetail.textContent = result.detail;
+  dom.resultOverlay.hidden = false;
+}
+
 function render(timestamp = performance.now()) {
   renderStats(timestamp);
   renderStatus();
   renderPresents();
   renderRobotSizing();
   renderCoins(timestamp);
+  renderResultOverlay();
 }
 
 function updateGhostPosition(event) {
@@ -1348,6 +1415,10 @@ document.addEventListener("pointerdown", (event) => {
 
 dom.newGameButton.addEventListener("click", () => {
   dom.appMenu.open = false;
+  newGame(state.settings);
+});
+
+dom.resultNewGameButton.addEventListener("click", () => {
   newGame(state.settings);
 });
 

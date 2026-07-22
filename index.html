@@ -48,6 +48,7 @@
         <section class="zone zone--robot" data-drop="robot" aria-label="Robot">
           <div class="robot">
             <div class="robot-head" aria-hidden="true">🤖</div>
+            <div class="robot-neck" aria-hidden="true"></div>
             <div class="robot-body">
               <div class="robot-stack" id="robot-stack"></div>
             </div>
@@ -59,6 +60,16 @@
         Feed the robot first, then invest coins so they can make more coins.
       </section>
     </main>
+
+    <section class="result-overlay" id="result-overlay" aria-live="assertive" hidden>
+      <div class="result-card">
+        <p class="result-kicker" id="result-kicker"></p>
+        <h2 class="result-title" id="result-title"></h2>
+        <p class="result-message" id="result-message"></p>
+        <p class="result-detail" id="result-detail"></p>
+        <button class="result-button" id="result-new-game-button" type="button">Play again</button>
+      </div>
+    </section>
 
     <dialog class="settings-dialog" id="settings-dialog">
       <form method="dialog" class="settings-form" id="settings-form">
