@@ -1035,10 +1035,21 @@ function resultMessageForState() {
   };
 }
 
+function hasActivePresentReveal(timestamp = performance.now()) {
+  return (
+    state.presents.some((present) => present.revealEndsAt !== null && timestamp < present.revealEndsAt) ||
+    document.querySelector(".present-reveal") !== null
+  );
+}
+
 function renderResultOverlay() {
-  if (state.status === "playing") {
+  if (state.status === "playing" || hasActivePresentReveal()) {
     dom.resultOverlay.hidden = true;
-    dom.resultCard.classList.remove("is-lost", "is-won");
+
+    if (state.status === "playing") {
+      dom.resultCard.classList.remove("is-lost", "is-won");
+    }
+
     return;
   }
 
