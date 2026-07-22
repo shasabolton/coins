@@ -239,12 +239,16 @@ function robotHeadFontSize() {
   return robotBodyWidth() * 0.78;
 }
 
-function robotBodyPadding() {
-  return clamp(window.innerHeight * 0.007, 4, 6);
+function robotNeckWidth() {
+  return clamp(robotBodyWidth() * 0.26, 18, 30);
 }
 
-function robotGap() {
-  return clamp(window.innerHeight * 0.004, 2, 4);
+function robotNeckHeight() {
+  return clamp(window.innerHeight * 0.012, 7, 12);
+}
+
+function robotBodyPadding() {
+  return clamp(window.innerHeight * 0.007, 4, 6);
 }
 
 function robotStackGap() {
@@ -265,7 +269,7 @@ function robotAvailableStackHeight() {
 
   return Math.max(
     0,
-    dom.robot.clientHeight - robotBodyWidth() - robotGap() - robotBodyPadding() * 2 - bodyBorderHeight - robotBottomPadding,
+    dom.robot.clientHeight - robotBodyWidth() - robotNeckHeight() - robotBodyPadding() * 2 - bodyBorderHeight - robotBottomPadding,
   );
 }
 
@@ -936,6 +940,8 @@ function renderCoins(timestamp) {
 function renderRobotSizing() {
   dom.robot.style.setProperty("--robot-body-width", `${robotBodyWidth()}px`);
   dom.robot.style.setProperty("--robot-head-font-size", `${robotHeadFontSize()}px`);
+  dom.robot.style.setProperty("--robot-neck-width", `${robotNeckWidth()}px`);
+  dom.robot.style.setProperty("--robot-neck-height", `${robotNeckHeight()}px`);
   dom.robot.style.setProperty("--robot-coin-size", `${robotCoinSize()}px`);
   dom.robot.style.setProperty("--robot-stack-gap", `${robotStackGap()}px`);
   dom.robot.style.setProperty("--robot-stack-height", `${robotStackHeight()}px`);
@@ -1030,11 +1036,9 @@ function resultMessageForState() {
 }
 
 function renderResultOverlay() {
-  if (state.status === "playing" || document.querySelector(".present-reveal")) {
+  if (state.status === "playing") {
     dom.resultOverlay.hidden = true;
-    if (state.status === "playing") {
-      dom.resultCard.classList.remove("is-lost", "is-won");
-    }
+    dom.resultCard.classList.remove("is-lost", "is-won");
     return;
   }
 
