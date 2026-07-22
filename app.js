@@ -236,7 +236,11 @@ function robotBodyWidth() {
 }
 
 function robotHeadFontSize() {
-  return robotBodyWidth() * 0.78;
+  return robotBodyWidth();
+}
+
+function robotHeadHeight() {
+  return robotHeadFontSize() * 0.72;
 }
 
 function robotNeckWidth() {
@@ -245,6 +249,10 @@ function robotNeckWidth() {
 
 function robotNeckHeight() {
   return clamp(window.innerHeight * 0.012, 7, 12);
+}
+
+function robotNeckOverlap() {
+  return clamp(robotHeadFontSize() * 0.035, 1, 3);
 }
 
 function robotBodyPadding() {
@@ -269,7 +277,13 @@ function robotAvailableStackHeight() {
 
   return Math.max(
     0,
-    dom.robot.clientHeight - robotBodyWidth() - robotNeckHeight() - robotBodyPadding() * 2 - bodyBorderHeight - robotBottomPadding,
+    dom.robot.clientHeight -
+      robotHeadHeight() -
+      robotNeckHeight() +
+      robotNeckOverlap() -
+      robotBodyPadding() * 2 -
+      bodyBorderHeight -
+      robotBottomPadding,
   );
 }
 
@@ -940,8 +954,10 @@ function renderCoins(timestamp) {
 function renderRobotSizing() {
   dom.robot.style.setProperty("--robot-body-width", `${robotBodyWidth()}px`);
   dom.robot.style.setProperty("--robot-head-font-size", `${robotHeadFontSize()}px`);
+  dom.robot.style.setProperty("--robot-head-height", `${robotHeadHeight()}px`);
   dom.robot.style.setProperty("--robot-neck-width", `${robotNeckWidth()}px`);
   dom.robot.style.setProperty("--robot-neck-height", `${robotNeckHeight()}px`);
+  dom.robot.style.setProperty("--robot-neck-offset", `-${robotNeckOverlap()}px`);
   dom.robot.style.setProperty("--robot-coin-size", `${robotCoinSize()}px`);
   dom.robot.style.setProperty("--robot-stack-gap", `${robotStackGap()}px`);
   dom.robot.style.setProperty("--robot-stack-height", `${robotStackHeight()}px`);
@@ -1036,9 +1052,11 @@ function resultMessageForState() {
 }
 
 function renderResultOverlay() {
-  if (state.status === "playing") {
+  if (state.status === "playing" || document.querySelector(".present-reveal")) {
     dom.resultOverlay.hidden = true;
-    dom.resultCard.classList.remove("is-lost", "is-won");
+    if (state.status === "playing") {
+      dom.resultCard.classList.remove("is-lost", "is-won");
+    }
     return;
   }
 
