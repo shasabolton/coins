@@ -611,7 +611,7 @@ h2 {
   align-items: flex-end;
   justify-content: center;
   font-size: var(--robot-head-font-size);
-  line-height: 0.74;
+  line-height: 0.86;
   filter: drop-shadow(0 6px 8px rgba(58, 105, 160, 0.2));
 }
 
