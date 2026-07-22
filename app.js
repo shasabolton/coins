@@ -236,15 +236,15 @@ function robotBodyWidth() {
 }
 
 function robotHeadFontSize() {
-  return robotBodyWidth() * 0.9;
-}
-
-function robotHeadHeight() {
-  return robotBodyWidth();
+  return robotBodyWidth() * 0.78;
 }
 
 function robotBodyPadding() {
   return clamp(window.innerHeight * 0.007, 4, 6);
+}
+
+function robotGap() {
+  return clamp(window.innerHeight * 0.004, 2, 4);
 }
 
 function robotStackGap() {
@@ -265,11 +265,7 @@ function robotAvailableStackHeight() {
 
   return Math.max(
     0,
-    dom.robot.clientHeight -
-      robotHeadHeight() -
-      robotBodyPadding() * 2 -
-      bodyBorderHeight -
-      robotBottomPadding,
+    dom.robot.clientHeight - robotBodyWidth() - robotGap() - robotBodyPadding() * 2 - bodyBorderHeight - robotBottomPadding,
   );
 }
 
@@ -940,7 +936,6 @@ function renderCoins(timestamp) {
 function renderRobotSizing() {
   dom.robot.style.setProperty("--robot-body-width", `${robotBodyWidth()}px`);
   dom.robot.style.setProperty("--robot-head-font-size", `${robotHeadFontSize()}px`);
-  dom.robot.style.setProperty("--robot-head-height", `${robotHeadHeight()}px`);
   dom.robot.style.setProperty("--robot-coin-size", `${robotCoinSize()}px`);
   dom.robot.style.setProperty("--robot-stack-gap", `${robotStackGap()}px`);
   dom.robot.style.setProperty("--robot-stack-height", `${robotStackHeight()}px`);
