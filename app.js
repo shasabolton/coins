@@ -236,11 +236,11 @@ function robotBodyWidth() {
 }
 
 function robotHeadFontSize() {
-  return robotBodyWidth();
+  return robotBodyWidth() * 0.9;
 }
 
 function robotHeadHeight() {
-  return robotHeadFontSize() * 0.68;
+  return robotBodyWidth();
 }
 
 function robotBodyPadding() {

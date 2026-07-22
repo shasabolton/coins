@@ -589,9 +589,9 @@ h2 {
   --robot-body-width: clamp(68px, min(26vw, 17dvh), 112px);
   --robot-body-padding: clamp(4px, 0.7dvh, 6px);
   --robot-coin-size: clamp(16px, min(7vw, 4.2dvh), 30px);
-  --robot-head-height: 46px;
+  --robot-head-height: 68px;
   --robot-stack-gap: clamp(1px, 0.45dvh, 3px);
-  --robot-head-font-size: 68px;
+  --robot-head-font-size: 61px;
   --robot-stack-height: 129px;
   display: grid;
   grid-template-rows: auto auto;
@@ -609,10 +609,10 @@ h2 {
   width: var(--robot-body-width);
   height: var(--robot-head-height);
   display: grid;
-  place-items: end center;
+  place-items: center;
   font-size: var(--robot-head-font-size);
   line-height: 1;
-  overflow: visible;
+  overflow: hidden;
   filter: drop-shadow(0 6px 8px rgba(58, 105, 160, 0.2));
 }
 
