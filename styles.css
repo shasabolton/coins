@@ -607,10 +607,11 @@ h2 {
 .robot-head {
   width: var(--robot-body-width);
   aspect-ratio: 1;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   font-size: var(--robot-head-font-size);
-  line-height: 1;
+  line-height: 0.74;
   filter: drop-shadow(0 6px 8px rgba(58, 105, 160, 0.2));
 }
 
