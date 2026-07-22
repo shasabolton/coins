@@ -240,19 +240,7 @@ function robotHeadFontSize() {
 }
 
 function robotHeadHeight() {
-  return robotHeadFontSize() * 0.72;
-}
-
-function robotNeckWidth() {
-  return clamp(robotBodyWidth() * 0.26, 18, 30);
-}
-
-function robotNeckHeight() {
-  return clamp(window.innerHeight * 0.012, 7, 12);
-}
-
-function robotNeckOverlap() {
-  return clamp(robotHeadFontSize() * 0.035, 1, 3);
+  return robotHeadFontSize() * 0.68;
 }
 
 function robotBodyPadding() {
@@ -279,8 +267,6 @@ function robotAvailableStackHeight() {
     0,
     dom.robot.clientHeight -
       robotHeadHeight() -
-      robotNeckHeight() +
-      robotNeckOverlap() -
       robotBodyPadding() * 2 -
       bodyBorderHeight -
       robotBottomPadding,
@@ -955,9 +941,6 @@ function renderRobotSizing() {
   dom.robot.style.setProperty("--robot-body-width", `${robotBodyWidth()}px`);
   dom.robot.style.setProperty("--robot-head-font-size", `${robotHeadFontSize()}px`);
   dom.robot.style.setProperty("--robot-head-height", `${robotHeadHeight()}px`);
-  dom.robot.style.setProperty("--robot-neck-width", `${robotNeckWidth()}px`);
-  dom.robot.style.setProperty("--robot-neck-height", `${robotNeckHeight()}px`);
-  dom.robot.style.setProperty("--robot-neck-offset", `-${robotNeckOverlap()}px`);
   dom.robot.style.setProperty("--robot-coin-size", `${robotCoinSize()}px`);
   dom.robot.style.setProperty("--robot-stack-gap", `${robotStackGap()}px`);
   dom.robot.style.setProperty("--robot-stack-height", `${robotStackHeight()}px`);
