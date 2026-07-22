@@ -590,7 +590,6 @@ h2 {
   --robot-body-padding: clamp(4px, 0.7dvh, 6px);
   --robot-coin-size: clamp(16px, min(7vw, 4.2dvh), 30px);
   --robot-head-height: 68px;
-  --robot-head-offset-x: -0.06em;
   --robot-stack-gap: clamp(1px, 0.45dvh, 3px);
   --robot-head-font-size: 61px;
   --robot-stack-height: 129px;
@@ -615,11 +614,6 @@ h2 {
   line-height: 1;
   overflow: hidden;
   filter: drop-shadow(0 6px 8px rgba(58, 105, 160, 0.2));
-}
-
-.robot-head__emoji {
-  display: inline-block;
-  transform: translateX(var(--robot-head-offset-x));
 }
 
 .robot-body {
