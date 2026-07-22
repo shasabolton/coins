@@ -198,6 +198,161 @@ h2 {
   box-shadow: inset 0 -8px 16px rgba(37, 27, 19, 0.06);
 }
 
+.present.is-revealing {
+  background:
+    linear-gradient(90deg, transparent 44%, rgba(255, 255, 255, 0.45) 45%, rgba(255, 255, 255, 0.45) 55%, transparent 56%),
+    linear-gradient(0deg, transparent 44%, rgba(255, 255, 255, 0.45) 45%, rgba(255, 255, 255, 0.45) 55%, transparent 56%),
+    linear-gradient(135deg, #ff7d9b, #c95dcf);
+  border-color: rgba(151, 73, 93, 0.2);
+  box-shadow: inset 0 -8px 16px rgba(98, 44, 75, 0.13);
+}
+
+.present-reveal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.present-reveal__stage {
+  position: absolute;
+  left: var(--origin-x);
+  top: var(--origin-y);
+  width: var(--source-width);
+  height: var(--source-height);
+  display: grid;
+  place-items: center;
+  filter: drop-shadow(0 24px 38px rgba(58, 41, 25, 0.3));
+  transform-origin: center;
+  animation: present-reveal-flight 4000ms cubic-bezier(0.2, 0.88, 0.2, 1) forwards;
+}
+
+.present-reveal__gift,
+.present-reveal__emoji {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  font-size: clamp(1.05rem, min(7vw, 5dvh), 1.8rem);
+  line-height: 1;
+}
+
+.present-reveal__gift {
+  border: 1px solid rgba(151, 73, 93, 0.2);
+  background:
+    linear-gradient(90deg, transparent 44%, rgba(255, 255, 255, 0.45) 45%, rgba(255, 255, 255, 0.45) 55%, transparent 56%),
+    linear-gradient(0deg, transparent 44%, rgba(255, 255, 255, 0.45) 45%, rgba(255, 255, 255, 0.45) 55%, transparent 56%),
+    linear-gradient(135deg, #ff7d9b, #c95dcf);
+  box-shadow: inset 0 -8px 16px rgba(98, 44, 75, 0.13);
+  animation: present-gift-pop 4000ms ease forwards;
+}
+
+.present-reveal__emoji {
+  border: 1px solid rgba(37, 27, 19, 0.1);
+  background: #fff;
+  box-shadow: inset 0 -8px 16px rgba(37, 27, 19, 0.06);
+  opacity: 0;
+  animation: present-emoji-reveal 4000ms cubic-bezier(0.2, 0.88, 0.2, 1) forwards;
+}
+
+.present-reveal__confetti-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+}
+
+.present-reveal__confetti {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: clamp(4px, 1.6vw, 8px);
+  height: clamp(8px, 2.6vw, 14px);
+  border-radius: 2px;
+  background: var(--confetti-color);
+  opacity: 0;
+  transform-origin: center;
+  animation: present-confetti-burst 4000ms ease-out var(--confetti-delay, 0ms) forwards;
+}
+
+@keyframes present-reveal-flight {
+  0% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+
+  18%,
+  74% {
+    transform: translate(-50%, -50%) translate(var(--move-x), var(--move-y)) scale(var(--front-scale));
+  }
+
+  100% {
+    transform: translate(-50%, -50%) translate(0, 0) scale(1);
+  }
+}
+
+@keyframes present-gift-pop {
+  0%,
+  39% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+
+  48% {
+    opacity: 1;
+    transform: scale(1.14) rotate(-5deg);
+  }
+
+  56%,
+  100% {
+    opacity: 0;
+    transform: scale(1.72) rotate(18deg);
+  }
+}
+
+@keyframes present-emoji-reveal {
+  0%,
+  45% {
+    opacity: 0;
+    transform: scale(0.42) rotate(-8deg);
+  }
+
+  56% {
+    opacity: 1;
+    transform: scale(1.12) rotate(4deg);
+  }
+
+  68%,
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+@keyframes present-confetti-burst {
+  0%,
+  42% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.2) rotate(0deg);
+  }
+
+  48% {
+    opacity: 1;
+  }
+
+  82% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--confetti-x)), calc(-50% + var(--confetti-y))) scale(1) rotate(var(--confetti-rotate));
+  }
+}
+
 .playfield {
   display: grid;
   grid-template-columns: 1fr 1fr;

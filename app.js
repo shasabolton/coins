@@ -14,6 +14,8 @@ const PARTICLE_MAX_SPEED = 18;
 const PARTICLE_DAMPING = 0.996;
 const SPLIT_PUSH_SPEED = 30;
 const BANK_SPLIT_ANIMATION_MS = 1000;
+const PRESENT_REVEAL_MS = 4000;
+const PRESENT_CONFETTI_PIECES = 30;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 
 const PRESETS = {
@@ -135,6 +137,10 @@ function randomVelocity() {
     vx: Math.cos(angle) * speed,
     vy: Math.sin(angle) * speed,
   };
+}
+
+function randomSign() {
+  return Math.random() < 0.5 ? -1 : 1;
 }
 
 function shuffle(items) {
@@ -459,6 +465,10 @@ function grantStaticStep() {
   state.staticBudgetMs += payrateMs();
 }
 
+function clearPresentReveals() {
+  document.querySelectorAll(".present-reveal").forEach((element) => element.remove());
+}
+
 function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
   const timestamp = performance.now();
   const emojis = shuffle(EMOJIS);
@@ -491,9 +501,12 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     presents: Array.from({ length: settings.presents }, (_, index) => ({
       emoji: emojis[index % emojis.length],
       opened: false,
+      revealEndsAt: null,
     })),
     openedCount: 0,
   };
+
+  clearPresentReveals();
 
   for (let count = 0; count < settings.start; count += 1) {
     createRobotCoin(timestamp);
@@ -855,14 +868,23 @@ function renderCoins(timestamp) {
 
 function renderPresents() {
   const fragment = document.createDocumentFragment();
+  const timestamp = performance.now();
 
   state.presents.forEach((present, index) => {
+    const isRevealing = present.opened && present.revealEndsAt !== null && timestamp < present.revealEndsAt;
     const element = document.createElement("button");
     element.type = "button";
-    element.className = `present${present.opened ? " is-open" : ""}`;
+    element.className = `present${present.opened ? " is-open" : ""}${isRevealing ? " is-revealing" : ""}`;
     element.dataset.presentIndex = String(index);
-    element.setAttribute("aria-label", present.opened ? `Opened present with ${present.emoji}` : "Wrapped present");
-    element.textContent = present.opened ? present.emoji : "🎁";
+    element.setAttribute(
+      "aria-label",
+      isRevealing
+        ? `Opening present with ${present.emoji}`
+        : present.opened
+          ? `Opened present with ${present.emoji}`
+          : "Wrapped present",
+    );
+    element.textContent = present.opened && !isRevealing ? present.emoji : "🎁";
     fragment.append(element);
   });
 
@@ -1031,7 +1053,7 @@ function handleDrop(coinId, target, timestamp, event) {
   const presentElement = target?.closest(".present");
 
   if (presentElement) {
-    return openPresent(coin, Number(presentElement.dataset.presentIndex));
+    return openPresent(coin, Number(presentElement.dataset.presentIndex), presentElement);
   }
 
   const dropZone = target?.closest("[data-drop]");
@@ -1094,7 +1116,70 @@ function investCoin(coin, timestamp, event) {
   return true;
 }
 
-function openPresent(coin, presentIndex) {
+function createConfettiPiece() {
+  const piece = document.createElement("span");
+  const angle = randomBetween(0, Math.PI * 2);
+  const distance = randomBetween(60, 170);
+  const drift = randomBetween(18, 70) * randomSign();
+  const colors = ["#ff7d9b", "#f7b733", "#55b77a", "#5ea8ff", "#c95dcf", "#fff0c2"];
+
+  piece.className = "present-reveal__confetti";
+  piece.style.setProperty("--confetti-x", `${Math.cos(angle) * distance + drift}px`);
+  piece.style.setProperty("--confetti-y", `${Math.sin(angle) * distance + randomBetween(20, 95)}px`);
+  piece.style.setProperty("--confetti-rotate", `${randomBetween(-720, 720)}deg`);
+  piece.style.setProperty("--confetti-color", colors[Math.floor(Math.random() * colors.length)]);
+  piece.style.setProperty("--confetti-delay", `${randomBetween(0, 180)}ms`);
+
+  return piece;
+}
+
+function playPresentReveal(present, sourceElement) {
+  const sourceRect = sourceElement?.getBoundingClientRect();
+  const sourceWidth = sourceRect?.width || 72;
+  const sourceHeight = sourceRect?.height || 72;
+  const originX = sourceRect ? sourceRect.left + sourceRect.width / 2 : window.innerWidth / 2;
+  const originY = sourceRect ? sourceRect.top + sourceRect.height / 2 : window.innerHeight / 2;
+  const moveX = window.innerWidth / 2 - originX;
+  const moveY = window.innerHeight / 2 - originY;
+  const targetSize = Math.min(window.innerWidth, window.innerHeight) * 0.38;
+  const frontScale = clamp(targetSize / Math.max(sourceWidth, sourceHeight), 2.2, 4.4);
+  const overlay = document.createElement("div");
+  const stage = document.createElement("div");
+  const gift = document.createElement("span");
+  const emoji = document.createElement("span");
+  const confetti = document.createElement("span");
+
+  overlay.className = "present-reveal";
+  overlay.setAttribute("aria-hidden", "true");
+
+  stage.className = "present-reveal__stage";
+  stage.style.setProperty("--origin-x", `${originX}px`);
+  stage.style.setProperty("--origin-y", `${originY}px`);
+  stage.style.setProperty("--source-width", `${sourceWidth}px`);
+  stage.style.setProperty("--source-height", `${sourceHeight}px`);
+  stage.style.setProperty("--move-x", `${moveX}px`);
+  stage.style.setProperty("--move-y", `${moveY}px`);
+  stage.style.setProperty("--front-scale", frontScale.toFixed(3));
+
+  gift.className = "present-reveal__gift";
+  gift.textContent = "🎁";
+
+  emoji.className = "present-reveal__emoji";
+  emoji.textContent = present.emoji;
+
+  confetti.className = "present-reveal__confetti-burst";
+
+  for (let count = 0; count < PRESENT_CONFETTI_PIECES; count += 1) {
+    confetti.append(createConfettiPiece());
+  }
+
+  stage.append(gift, emoji, confetti);
+  overlay.append(stage);
+  document.body.append(overlay);
+  stage.addEventListener("animationend", () => overlay.remove(), { once: true });
+}
+
+function openPresent(coin, presentIndex, sourceElement) {
   const present = state.presents[presentIndex];
 
   if (!present || present.opened) {
@@ -1102,8 +1187,10 @@ function openPresent(coin, presentIndex) {
   }
 
   present.opened = true;
+  present.revealEndsAt = performance.now() + PRESENT_REVEAL_MS;
   state.openedCount += 1;
   removeCoin(coin.id);
+  playPresentReveal(present, sourceElement);
   setMessage(`The present opened and revealed ${present.emoji}.`);
   checkWinOrLoss();
   return true;
