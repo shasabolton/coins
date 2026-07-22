@@ -76,6 +76,7 @@ const dom = {
   presentGrid: document.querySelector("#present-grid"),
   purseCoins: document.querySelector("#purse-coins"),
   bankCoins: document.querySelector("#bank-coins"),
+  robot: document.querySelector(".robot"),
   robotStack: document.querySelector("#robot-stack"),
   messagePanel: document.querySelector("#message-panel"),
   appMenu: document.querySelector(".app-menu"),
@@ -219,12 +220,65 @@ function particleRadius(location) {
   return particleSize(location) / 2;
 }
 
-function robotCoinSize() {
+function baseRobotCoinSize() {
   return clamp(Math.min(window.innerWidth * 0.07, window.innerHeight * 0.042), 16, 30);
+}
+
+function robotBodyWidth() {
+  return clamp(Math.min(window.innerWidth * 0.26, window.innerHeight * 0.17), 68, 112);
+}
+
+function robotHeadFontSize() {
+  return robotBodyWidth() * 0.78;
+}
+
+function robotBodyPadding() {
+  return clamp(window.innerHeight * 0.007, 4, 6);
+}
+
+function robotGap() {
+  return clamp(window.innerHeight * 0.004, 2, 4);
 }
 
 function robotStackGap() {
   return clamp(window.innerHeight * 0.0045, 1, 3);
+}
+
+function robotStackCapacity() {
+  return Math.max(1, state?.settings.feedrate ?? DEFAULT_SETTINGS.feedrate);
+}
+
+function robotAvailableStackHeight() {
+  if (!dom.robot?.clientHeight) {
+    return Infinity;
+  }
+
+  const robotBottomPadding = clamp(window.innerHeight * 0.01, 6, 14);
+  const bodyBorderHeight = 6;
+
+  return Math.max(
+    0,
+    dom.robot.clientHeight - robotBodyWidth() - robotGap() - robotBodyPadding() * 2 - bodyBorderHeight - robotBottomPadding,
+  );
+}
+
+function robotCoinSize() {
+  const baseSize = baseRobotCoinSize();
+  const capacity = robotStackCapacity();
+  const totalGaps = robotStackGap() * Math.max(0, capacity - 1);
+  const maxSizeForCapacity = (robotAvailableStackHeight() - totalGaps) / capacity;
+
+  if (!Number.isFinite(maxSizeForCapacity) || maxSizeForCapacity <= 0) {
+    return baseSize;
+  }
+
+  return clamp(Math.min(baseSize, maxSizeForCapacity), 10, baseSize);
+}
+
+function robotStackHeight() {
+  const capacity = robotStackCapacity();
+
+  return robotCoinSize() * capacity + robotStackGap() * Math.max(0, capacity - 1);
 }
 
 function robotCoinScale(coin) {
@@ -866,6 +920,14 @@ function renderCoins(timestamp) {
   dom.robotStack.replaceChildren(robotFragment);
 }
 
+function renderRobotSizing() {
+  dom.robot.style.setProperty("--robot-body-width", `${robotBodyWidth()}px`);
+  dom.robot.style.setProperty("--robot-head-font-size", `${robotHeadFontSize()}px`);
+  dom.robot.style.setProperty("--robot-coin-size", `${robotCoinSize()}px`);
+  dom.robot.style.setProperty("--robot-stack-gap", `${robotStackGap()}px`);
+  dom.robot.style.setProperty("--robot-stack-height", `${robotStackHeight()}px`);
+}
+
 function renderPresents() {
   const fragment = document.createDocumentFragment();
   const timestamp = performance.now();
@@ -929,6 +991,7 @@ function render(timestamp = performance.now()) {
   renderStats(timestamp);
   renderStatus();
   renderPresents();
+  renderRobotSizing();
   renderCoins(timestamp);
 }
 

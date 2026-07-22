@@ -586,49 +586,38 @@ h2 {
 }
 
 .robot {
+  --robot-body-width: clamp(68px, min(26vw, 17dvh), 112px);
+  --robot-body-padding: clamp(4px, 0.7dvh, 6px);
+  --robot-coin-size: clamp(16px, min(7vw, 4.2dvh), 30px);
+  --robot-stack-gap: clamp(1px, 0.45dvh, 3px);
+  --robot-head-font-size: 54px;
+  --robot-stack-height: 129px;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
   align-content: center;
   justify-items: center;
-  gap: 0;
+  gap: clamp(2px, 0.4dvh, 4px);
   height: 100%;
   min-height: 0;
   padding: 0 clamp(6px, 2vw, 12px) clamp(6px, 1dvh, 14px);
 }
 
 .robot-head {
-  width: clamp(60px, min(23vw, 15dvh), 98px);
-  height: clamp(38px, min(9dvh, 15vw), 70px);
-  display: flex;
-  align-items: center;
-  justify-content: space-around;
-  border: 3px solid #5d86ba;
-  border-radius: 22px 22px 18px 18px;
-  background: linear-gradient(180deg, #f5fbff, #9cc8ff);
-  box-shadow: inset 0 -7px 14px rgba(58, 105, 160, 0.18);
-}
-
-.robot-eye {
-  width: clamp(7px, 2.5vw, 12px);
-  height: clamp(7px, 2.5vw, 12px);
-  border-radius: 50%;
-  background: var(--blue);
-  box-shadow: 0 0 12px rgba(94, 168, 255, 0.95);
-}
-
-.robot-mouth {
-  width: clamp(22px, 8vw, 36px);
-  height: clamp(6px, 1.8vw, 10px);
-  border-radius: 999px;
-  background: #2c4158;
+  width: var(--robot-body-width);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  font-size: var(--robot-head-font-size);
+  line-height: 1;
+  filter: drop-shadow(0 6px 8px rgba(58, 105, 160, 0.2));
 }
 
 .robot-body {
-  width: clamp(68px, min(26vw, 17dvh), 112px);
+  width: var(--robot-body-width);
   min-height: 0;
-  height: 100%;
+  height: auto;
   max-height: none;
-  padding: clamp(7px, 1.2dvh, 12px);
+  padding: var(--robot-body-padding);
   border: 3px solid #5d86ba;
   border-radius: 16px 16px 24px 24px;
   background: linear-gradient(180deg, #eaf5ff, #83b5ef);
@@ -636,7 +625,7 @@ h2 {
 
 .robot-stack {
   position: relative;
-  height: 100%;
+  height: var(--robot-stack-height);
   overflow: hidden;
 }
 
@@ -644,8 +633,8 @@ h2 {
   position: absolute;
   left: 50%;
   bottom: var(--robot-bottom, 0px);
-  width: clamp(16px, min(7vw, 4.2dvh), 30px);
-  height: clamp(16px, min(7vw, 4.2dvh), 30px);
+  width: var(--robot-coin-size);
+  height: var(--robot-coin-size);
   font-size: clamp(0.6rem, 2.8vw, 1rem);
   pointer-events: none;
   transform: translateX(-50%) scale(var(--scale));
