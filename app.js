@@ -884,7 +884,7 @@ function renderPresents() {
           ? `Opened present with ${present.emoji}`
           : "Wrapped present",
     );
-    element.textContent = present.opened && !isRevealing ? present.emoji : "🎁";
+    element.textContent = present.opened ? (isRevealing ? "" : present.emoji) : "🎁";
     fragment.append(element);
   });
 
