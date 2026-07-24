@@ -27,10 +27,12 @@ const TREE_GRID_SLOTS = [
   { x: 28, y: 77 },
   { x: 72, y: 77 },
 ];
-const TREE_ENVELOPE_RADIUS = 11.5;
-const TREE_INITIAL_BRANCH_LENGTH = 6.4;
+const TREE_CELL_X_RADIUS = 15;
+const TREE_CELL_TOP_OFFSET = 11;
+const TREE_CELL_BASE_OFFSET = 9.5;
+const TREE_INITIAL_BRANCH_LENGTH = 6.2;
 const TREE_BRANCH_SHRINK = 0.58;
-const TREE_BRANCH_FORK_ANGLE = Math.PI * 0.42;
+const TREE_BRANCH_FORK_ANGLE = Math.PI * 0.28;
 
 const PRESETS = {
   easy: {
@@ -183,43 +185,36 @@ function treeBranchWidth(depth = 0) {
 
 function treeSlotBaseAngle(slotIndex) {
   const column = slotIndex % 2;
-  const row = Math.floor(slotIndex / 2);
-  const columnTilt = column === 0 ? 0.18 : -0.18;
-  const rowTilt = (row - 1) * 0.08;
+  const columnTilt = column === 0 ? 0.06 : -0.06;
 
-  return -Math.PI / 2 + columnTilt + rowTilt;
+  return -Math.PI / 2 + columnTilt;
 }
 
 function treeRootNode(slotIndex, treeId) {
   const slot = TREE_GRID_SLOTS[slotIndex] ?? TREE_GRID_SLOTS[0];
+  const baseY = slot.y + TREE_CELL_BASE_OFFSET;
 
   return {
     treeId,
     treeSlot: slotIndex,
     treeDepth: 0,
     treeX: slot.x,
-    treeY: slot.y,
+    treeY: baseY,
     treeRootX: slot.x,
-    treeRootY: slot.y,
+    treeRootY: baseY,
+    treeLeftX: slot.x - TREE_CELL_X_RADIUS,
+    treeRightX: slot.x + TREE_CELL_X_RADIUS,
+    treeTopY: slot.y - TREE_CELL_TOP_OFFSET,
+    treeBaseY: baseY,
     treeAngle: treeSlotBaseAngle(slotIndex),
     treeNextBranchLength: TREE_INITIAL_BRANCH_LENGTH,
   };
 }
 
-function fitPointToTreeEnvelope(rootX, rootY, x, y) {
-  const dx = x - rootX;
-  const dy = y - rootY;
-  const distance = Math.hypot(dx, dy);
-
-  if (distance <= TREE_ENVELOPE_RADIUS) {
-    return { x, y };
-  }
-
-  const ratio = TREE_ENVELOPE_RADIUS / distance;
-
+function fitPointToTreeEnvelope(bounds, x, y) {
   return {
-    x: rootX + dx * ratio,
-    y: rootY + dy * ratio,
+    x: clamp(x, bounds.leftX, bounds.rightX),
+    y: clamp(y, bounds.topY, bounds.baseY),
   };
 }
 
@@ -258,18 +253,24 @@ function nextTreeChildNodes(coin, timestamp) {
   const depth = coin.treeDepth ?? 0;
   const childDepth = depth + 1;
   const branchLength = coin.treeNextBranchLength ?? TREE_INITIAL_BRANCH_LENGTH;
-  const forkAngle = TREE_BRANCH_FORK_ANGLE * 0.86 ** depth;
+  const forkAngle = TREE_BRANCH_FORK_ANGLE * 0.62 ** depth;
   const parentX = coin.treeX ?? 50;
   const parentY = coin.treeY ?? 50;
   const rootX = coin.treeRootX ?? parentX;
   const rootY = coin.treeRootY ?? parentY;
   const parentAngle = coin.treeAngle ?? -Math.PI / 2;
+  const centerAngle = parentAngle * 0.45 + (-Math.PI / 2) * 0.55;
+  const bounds = {
+    leftX: coin.treeLeftX ?? rootX - TREE_CELL_X_RADIUS,
+    rightX: coin.treeRightX ?? rootX + TREE_CELL_X_RADIUS,
+    topY: coin.treeTopY ?? rootY - TREE_CELL_TOP_OFFSET,
+    baseY: coin.treeBaseY ?? rootY,
+  };
 
   return [-1, 1].map((side) => {
-    const angle = parentAngle + side * forkAngle;
+    const angle = centerAngle + side * forkAngle;
     const point = fitPointToTreeEnvelope(
-      rootX,
-      rootY,
+      bounds,
       parentX + Math.cos(angle) * branchLength,
       parentY + Math.sin(angle) * branchLength,
     );
@@ -281,6 +282,10 @@ function nextTreeChildNodes(coin, timestamp) {
       treeY: point.y,
       treeRootX: rootX,
       treeRootY: rootY,
+      treeLeftX: bounds.leftX,
+      treeRightX: bounds.rightX,
+      treeTopY: bounds.topY,
+      treeBaseY: bounds.baseY,
       treeParentX: parentX,
       treeParentY: parentY,
       treeAngle: angle,
@@ -323,6 +328,10 @@ function createCoin(location, timestamp) {
     treeY: 50,
     treeRootX: 50,
     treeRootY: 50,
+    treeLeftX: 35,
+    treeRightX: 65,
+    treeTopY: 35,
+    treeBaseY: 50,
     treeParentX: null,
     treeParentY: null,
     treeAngle: -Math.PI / 2,
@@ -1147,6 +1156,17 @@ function createTreeBloomCoinElement(childNode, progress) {
   return element;
 }
 
+function createTreeBaseElement(root) {
+  const element = document.createElement("span");
+
+  element.className = "tree-base";
+  element.setAttribute("aria-hidden", "true");
+  element.style.setProperty("--x", `${root.x}%`);
+  element.style.setProperty("--y", `${root.y}%`);
+
+  return element;
+}
+
 function treeBranchProgress(branch, timestamp) {
   if (branch.complete || branch.completesAt === null || branch.startedAt === null) {
     return 1;
@@ -1169,10 +1189,15 @@ function createSplitChildElement(coin) {
 }
 
 function renderTreeBankCoins(fragment, bankCoins, timestamp) {
+  const bases = document.createDocumentFragment();
   const branches = document.createDocumentFragment();
   const bloomCoins = document.createDocumentFragment();
   const coins = document.createDocumentFragment();
   const splitTimestamp = bankSplitRenderTimestamp(timestamp);
+
+  for (const root of state.treeRoots) {
+    bases.append(createTreeBaseElement(root));
+  }
 
   for (const branch of state.treeBranches) {
     branches.append(
@@ -1199,7 +1224,7 @@ function renderTreeBankCoins(fragment, bankCoins, timestamp) {
     coins.append(createCoinElement(coin, timestamp, "bank"));
   }
 
-  fragment.append(branches, bloomCoins, coins);
+  fragment.append(bases, branches, bloomCoins, coins);
 }
 
 function renderCoins(timestamp) {
@@ -1622,10 +1647,11 @@ function placeTreeRootFromEvent(coin, event) {
   const yPercent = ((event.clientY - rect.top) / Math.max(1, area.height)) * 100;
   const slotIndex = chooseTreeSlot(closestTreeSlotIndex(xPercent, yPercent));
   const treeId = state.nextTreeId;
+  const rootNode = treeRootNode(slotIndex, treeId);
 
   state.nextTreeId += 1;
-  state.treeRoots.push({ id: treeId, slotIndex });
-  Object.assign(coin, treeRootNode(slotIndex, treeId));
+  state.treeRoots.push({ id: treeId, slotIndex, x: rootNode.treeRootX, y: rootNode.treeRootY });
+  Object.assign(coin, rootNode);
   coin.particle = null;
 }
 
