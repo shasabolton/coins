@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   presents: 9,
   lifetime: 10,
   staticMode: true,
+  bankTheme: "bank",
 };
 
 const PARTICLE_MIN_SPEED = 6;
@@ -17,6 +18,11 @@ const BANK_SPLIT_ANIMATION_MS = 1000;
 const PRESENT_REVEAL_MS = 4000;
 const PRESENT_CONFETTI_PIECES = 30;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
+const BANK_THEME_VALUES = new Set(["bank", "tree"]);
+const TREE_ROOT_Y = 84;
+const TREE_BASE_Y = 96;
+const TREE_MIN_COORD = 7;
+const TREE_MAX_COORD = 93;
 
 const PRESETS = {
   easy: {
@@ -28,6 +34,7 @@ const PRESETS = {
     presents: 7,
     lifetime: 12,
     staticMode: false,
+    bankTheme: "bank",
   },
   medium: DEFAULT_SETTINGS,
   hard: {
@@ -39,6 +46,7 @@ const PRESETS = {
     presents: 10,
     lifetime: 8,
     staticMode: false,
+    bankTheme: "bank",
   },
 };
 
@@ -76,6 +84,7 @@ const dom = {
   presentGrid: document.querySelector("#present-grid"),
   purseCoins: document.querySelector("#purse-coins"),
   bankCoins: document.querySelector("#bank-coins"),
+  bankZone: document.querySelector(".zone--bank"),
   robot: document.querySelector(".robot"),
   robotStack: document.querySelector("#robot-stack"),
   resultOverlay: document.querySelector("#result-overlay"),
@@ -99,6 +108,7 @@ const dom = {
     feedrate: document.querySelector("#feedrate-input"),
     start: document.querySelector("#start-input"),
     interest: document.querySelector("#interest-input"),
+    bankTheme: document.querySelector("#bank-theme-input"),
     presents: document.querySelector("#presents-input"),
     lifetime: document.querySelector("#lifetime-input"),
     staticMode: document.querySelector("#static-input"),
@@ -151,6 +161,47 @@ function randomSign() {
   return Math.random() < 0.5 ? -1 : 1;
 }
 
+function isTreeBankTheme(settings = state?.settings) {
+  return settings?.bankTheme === "tree";
+}
+
+function treeCoinScale(depth = 0) {
+  return clamp(1 - depth * 0.13, 0.4, 1);
+}
+
+function treeBranchWidth(depth = 0) {
+  return clamp(6 - depth * 0.7, 2, 6);
+}
+
+function treeRootNode(xPercent) {
+  const x = clamp(xPercent, TREE_MIN_COORD, TREE_MAX_COORD);
+
+  return {
+    treeDepth: 0,
+    treeX: x,
+    treeY: TREE_ROOT_Y,
+    treeParentX: x,
+    treeParentY: TREE_BASE_Y,
+  };
+}
+
+function nextTreeChildNodes(coin) {
+  const depth = coin.treeDepth ?? 0;
+  const childDepth = depth + 1;
+  const spread = clamp(22 * 0.74 ** depth, 5, 22);
+  const rise = clamp(20 * 0.86 ** depth, 8, 20);
+  const parentX = coin.treeX ?? 50;
+  const parentY = coin.treeY ?? TREE_ROOT_Y;
+
+  return [-1, 1].map((side) => ({
+    treeDepth: childDepth,
+    treeX: clamp(parentX + spread * side, TREE_MIN_COORD, TREE_MAX_COORD),
+    treeY: clamp(parentY - rise, TREE_MIN_COORD, TREE_ROOT_Y),
+    treeParentX: parentX,
+    treeParentY: parentY,
+  }));
+}
+
 function shuffle(items) {
   const copy = [...items];
 
@@ -172,8 +223,14 @@ function createCoin(location, timestamp) {
     splitStartedAt: null,
     splitCompletesAt: null,
     splitChildParticle: null,
+    treeSproutChildren: null,
     splitAngle: 0,
     particle: null,
+    treeDepth: 0,
+    treeX: 50,
+    treeY: TREE_ROOT_Y,
+    treeParentX: 50,
+    treeParentY: TREE_BASE_Y,
     remainingMs: depreciationMs(),
   };
 
@@ -200,9 +257,14 @@ function createRobotCoin(timestamp) {
   return coin;
 }
 
-function createBankCoin(timestamp, particle = null) {
+function createBankCoin(timestamp, particle = null, treeNode = null) {
   const coin = createCoin("bank", timestamp);
   coin.particle = particle;
+
+  if (treeNode) {
+    Object.assign(coin, treeNode);
+  }
+
   return coin;
 }
 
@@ -382,6 +444,18 @@ function splitChildId(coin) {
   return `split-${coin.id}`;
 }
 
+function hasActiveBankSplit(coin) {
+  return Boolean(coin.splitChildParticle || coin.treeSproutChildren);
+}
+
+function clearBankSplit(coin) {
+  coin.nextSplitAt = null;
+  coin.splitStartedAt = null;
+  coin.splitCompletesAt = null;
+  coin.splitChildParticle = null;
+  coin.treeSproutChildren = null;
+}
+
 function particleItemsFor(location) {
   const coins = state.coins.filter((coin) => coin.location === location && drag?.id !== coin.id);
   const items = [];
@@ -494,7 +568,10 @@ function updateParticlePhysics(timestamp) {
     state.settings.staticMode && state.bankSplitRealStartedAt !== null ? timestamp : gameNow();
 
   updateParticleGroup("purse", dt, timestamp, gameNow());
-  updateParticleGroup("bank", dt, timestamp, bankSplitTimestamp);
+
+  if (!isTreeBankTheme()) {
+    updateParticleGroup("bank", dt, timestamp, bankSplitTimestamp);
+  }
 }
 
 function advanceGameClock(timestamp) {
@@ -539,6 +616,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
   const emojis = shuffle(EMOJIS);
   const effectiveSettings = {
     ...settings,
+    bankTheme: BANK_THEME_VALUES.has(settings.bankTheme) ? settings.bankTheme : DEFAULT_SETTINGS.bankTheme,
     payrate: settings.staticMode ? 1 : settings.payrate,
   };
 
@@ -686,6 +764,14 @@ function pushNearbyCoinsFromSplit(parentCoin) {
 }
 
 function beginSplit(coin, timestamp) {
+  if (isTreeBankTheme()) {
+    clearBankSplit(coin);
+    coin.splitStartedAt = timestamp;
+    coin.splitCompletesAt = timestamp + BANK_SPLIT_ANIMATION_MS;
+    coin.treeSproutChildren = nextTreeChildNodes(coin);
+    return;
+  }
+
   const parent = ensureParticle(coin, "bank");
   const angle = Math.random() * Math.PI * 2;
   const pushX = Math.cos(angle);
@@ -738,14 +824,23 @@ function pushSplitChildFromParent(coin, dt, timestamp) {
 }
 
 function completeSplit(coin, timestamp) {
+  if (coin.treeSproutChildren) {
+    const childNodes = coin.treeSproutChildren;
+
+    for (const childNode of childNodes) {
+      createBankCoin(timestamp, null, childNode);
+    }
+
+    removeCoin(coin.id);
+    return;
+  }
+
   const childParticle = {
     ...coin.splitChildParticle,
   };
 
   createBankCoin(timestamp, childParticle);
-  coin.splitStartedAt = null;
-  coin.splitCompletesAt = null;
-  coin.splitChildParticle = null;
+  clearBankSplit(coin);
 }
 
 function processBank(timestamp, realTimestamp = timestamp) {
@@ -758,7 +853,7 @@ function processBank(timestamp, realTimestamp = timestamp) {
       return;
     }
 
-    const splittingCoins = state.coins.filter((coin) => coin.location === "bank" && coin.splitChildParticle);
+    const splittingCoins = state.coins.filter((coin) => coin.location === "bank" && hasActiveBankSplit(coin));
 
     if (splittingCoins.some((coin) => drag?.id === coin.id)) {
       return;
@@ -839,14 +934,21 @@ function tick(timestamp) {
   requestAnimationFrame(tick);
 }
 
+function bankSplitRenderTimestamp(timestamp) {
+  return state.settings.staticMode && state.bankSplitRealStartedAt !== null ? performance.now() : timestamp;
+}
+
 function createCoinElement(coin, timestamp, location) {
   const element = document.createElement("button");
   element.type = "button";
-  element.className = `coin coin--${location}`;
+  element.className = `coin coin--${location}${location === "bank" && isTreeBankTheme() ? " coin--tree" : ""}`;
   element.dataset.coinId = String(coin.id);
   element.setAttribute("aria-label", `${location} coin`);
 
-  if (location === "purse" || location === "bank") {
+  if (location === "bank" && isTreeBankTheme()) {
+    element.style.setProperty("--x", `${coin.treeX ?? 50}%`);
+    element.style.setProperty("--y", `${coin.treeY ?? TREE_ROOT_Y}%`);
+  } else if (location === "purse" || location === "bank") {
     const particle = ensureParticle(coin, location);
     element.style.setProperty("--x", `${particle.x}px`);
     element.style.setProperty("--y", `${particle.y}px`);
@@ -872,17 +974,64 @@ function createCoinElement(coin, timestamp, location) {
     }
   } else {
     if (coin.splitCompletesAt !== null) {
-      const splitTimestamp =
-        state.settings.staticMode && state.bankSplitRealStartedAt !== null ? performance.now() : timestamp;
-      element.classList.add("is-splitting");
+      const splitTimestamp = bankSplitRenderTimestamp(timestamp);
+      const progress = splitProgress(coin, splitTimestamp);
+      element.classList.add(isTreeBankTheme() ? "is-sprouting" : "is-splitting");
+
+      if (isTreeBankTheme()) {
+        element.style.setProperty("--scale", (treeCoinScale(coin.treeDepth) * (1 - progress)).toFixed(2));
+      }
+
       element.title =
         splitTimestamp < coin.splitCompletesAt
-          ? `Splitting for ${formatSeconds(coin.splitCompletesAt - splitTimestamp)}`
-          : "Separating";
+          ? isTreeBankTheme()
+            ? `Blooming for ${formatSeconds(coin.splitCompletesAt - splitTimestamp)}`
+            : `Splitting for ${formatSeconds(coin.splitCompletesAt - splitTimestamp)}`
+          : isTreeBankTheme()
+            ? "Blooming"
+            : "Separating";
     } else {
-      element.title = `Bank splits in ${formatSeconds(state.bankNextSplitAt - timestamp)}`;
+      if (isTreeBankTheme()) {
+        element.style.setProperty("--scale", treeCoinScale(coin.treeDepth).toFixed(2));
+      }
+
+      element.title = isTreeBankTheme()
+        ? `Money tree blooms in ${formatSeconds(state.bankNextSplitAt - timestamp)}`
+        : `Bank splits in ${formatSeconds(state.bankNextSplitAt - timestamp)}`;
     }
   }
+
+  return element;
+}
+
+function createTreeBranchElement(fromX, fromY, toX, toY, depth = 0, progress = 1) {
+  const width = dom.bankCoins.clientWidth || 1;
+  const height = dom.bankCoins.clientHeight || 1;
+  const dx = ((toX - fromX) / 100) * width;
+  const dy = ((toY - fromY) / 100) * height;
+  const element = document.createElement("span");
+
+  element.className = "tree-branch";
+  element.setAttribute("aria-hidden", "true");
+  element.style.setProperty("--from-x", `${fromX}%`);
+  element.style.setProperty("--from-y", `${fromY}%`);
+  element.style.setProperty("--branch-length", `${Math.hypot(dx, dy)}px`);
+  element.style.setProperty("--branch-angle", `${Math.atan2(dy, dx)}rad`);
+  element.style.setProperty("--branch-width", `${treeBranchWidth(depth)}px`);
+  element.style.setProperty("--progress", clamp(progress, 0, 1).toFixed(3));
+
+  return element;
+}
+
+function createTreeBloomCoinElement(childNode, progress) {
+  const element = document.createElement("span");
+  const scale = treeCoinScale(childNode.treeDepth) * clamp(progress, 0, 1);
+
+  element.className = "coin coin--bank coin--tree tree-bloom-coin";
+  element.setAttribute("aria-hidden", "true");
+  element.style.setProperty("--x", `${childNode.treeX}%`);
+  element.style.setProperty("--y", `${childNode.treeY}%`);
+  element.style.setProperty("--scale", scale.toFixed(2));
 
   return element;
 }
@@ -900,16 +1049,66 @@ function createSplitChildElement(coin) {
   return element;
 }
 
+function renderTreeBankCoins(fragment, bankCoins, timestamp) {
+  const branches = document.createDocumentFragment();
+  const bloomCoins = document.createDocumentFragment();
+  const coins = document.createDocumentFragment();
+  const splitTimestamp = bankSplitRenderTimestamp(timestamp);
+
+  for (const coin of bankCoins) {
+    branches.append(
+      createTreeBranchElement(
+        coin.treeParentX ?? coin.treeX ?? 50,
+        coin.treeParentY ?? TREE_BASE_Y,
+        coin.treeX ?? 50,
+        coin.treeY ?? TREE_ROOT_Y,
+        coin.treeDepth ?? 0,
+      ),
+    );
+
+    if (coin.treeSproutChildren) {
+      const progress = splitProgress(coin, splitTimestamp);
+
+      for (const childNode of coin.treeSproutChildren) {
+        branches.append(
+          createTreeBranchElement(
+            childNode.treeParentX,
+            childNode.treeParentY,
+            childNode.treeX,
+            childNode.treeY,
+            childNode.treeDepth,
+            progress,
+          ),
+        );
+        bloomCoins.append(createTreeBloomCoinElement(childNode, progress));
+      }
+    }
+
+    coins.append(createCoinElement(coin, timestamp, "bank"));
+  }
+
+  fragment.append(branches, bloomCoins, coins);
+}
+
 function renderCoins(timestamp) {
   const purseFragment = document.createDocumentFragment();
   const bankFragment = document.createDocumentFragment();
   const robotFragment = document.createDocumentFragment();
   let robotOffset = 0;
+  const bankCoins = [];
 
   for (const coin of state.coins) {
     if (coin.location === "purse") {
       purseFragment.append(createCoinElement(coin, timestamp, "purse"));
     } else if (coin.location === "bank") {
+      bankCoins.push(coin);
+    }
+  }
+
+  if (isTreeBankTheme()) {
+    renderTreeBankCoins(bankFragment, bankCoins, timestamp);
+  } else {
+    for (const coin of bankCoins) {
       const splitChild = createSplitChildElement(coin);
 
       if (splitChild) {
@@ -985,6 +1184,13 @@ function renderStats(timestamp) {
 
   dom.bankTotal.textContent = `$${bankCoins.length}`;
   dom.bankInterestProgress.style.setProperty("--progress", progress.toFixed(3));
+}
+
+function renderBankTheme() {
+  const isTree = isTreeBankTheme();
+
+  dom.bankZone.classList.toggle("is-theme-tree", isTree);
+  dom.bankCoins.classList.toggle("coin-tray--tree", isTree);
 }
 
 function renderStatus() {
@@ -1065,6 +1271,7 @@ function renderResultOverlay() {
 }
 
 function render(timestamp = performance.now()) {
+  renderBankTheme();
   renderStats(timestamp);
   renderStatus();
   renderPresents();
@@ -1106,6 +1313,21 @@ function highlightTarget(event) {
 }
 
 function startDrag(event, coin) {
+  if (isTreeBankTheme() && coin.location === "bank" && hasActiveBankSplit(coin)) {
+    clearBankSplit(coin);
+    setMessage("Picked coin stopped blooming on that branch.");
+
+    if (!state.coins.some((bankCoin) => bankCoin.location === "bank" && hasActiveBankSplit(bankCoin))) {
+      const timestamp = gameNow();
+      state.bankSplitStartedAt = null;
+      state.bankSplitCompletesAt = null;
+      state.bankSplitRealStartedAt = null;
+      state.bankSplitRealCompletesAt = null;
+      state.bankCycleStartedAt = timestamp;
+      state.bankNextSplitAt = timestamp + interestMs();
+    }
+  }
+
   const ghost = document.createElement("div");
   ghost.className = "coin coin-ghost";
   ghost.setAttribute("aria-hidden", "true");
@@ -1219,10 +1441,9 @@ function feedRobot(coin) {
 
   coin.location = "robot";
   coin.expiresAt = null;
-  coin.nextSplitAt = null;
-  coin.splitStartedAt = null;
-  coin.splitCompletesAt = null;
-  coin.splitChildParticle = null;
+  clearBankSplit(coin);
+  coin.particle = null;
+  coin.treeSproutChildren = null;
   coin.remainingMs = depreciationMs();
   state.robotStack.push(coin.id);
   setMessage("The robot ate a coin and stacked it in his tummy.");
@@ -1240,6 +1461,14 @@ function placeParticleFromEvent(coin, location, event) {
   };
 }
 
+function placeTreeRootFromEvent(coin, event) {
+  const area = particleArea("bank");
+  const rect = area.element.getBoundingClientRect();
+  const xPercent = ((event.clientX - rect.left) / Math.max(1, area.width)) * 100;
+  Object.assign(coin, treeRootNode(xPercent));
+  coin.particle = null;
+}
+
 function investCoin(coin, timestamp, event) {
   if (coin.location !== "purse") {
     setMessage("Only fresh purse coins can be moved into the bank.");
@@ -1248,12 +1477,16 @@ function investCoin(coin, timestamp, event) {
 
   coin.location = "bank";
   coin.expiresAt = null;
-  coin.nextSplitAt = null;
-  coin.splitStartedAt = null;
-  coin.splitCompletesAt = null;
-  coin.splitChildParticle = null;
-  placeParticleFromEvent(coin, "bank", event);
-  setMessage("The coin is now invested in the savings bank.");
+  clearBankSplit(coin);
+
+  if (isTreeBankTheme()) {
+    placeTreeRootFromEvent(coin, event);
+    setMessage("The coin planted a new money tree root.");
+  } else {
+    placeParticleFromEvent(coin, "bank", event);
+    setMessage("The coin is now invested in the savings bank.");
+  }
+
   return true;
 }
 
@@ -1339,6 +1572,10 @@ function openPresent(coin, presentIndex, sourceElement) {
 
 function fillSettingsForm(settings) {
   Object.entries(settings).forEach(([key, value]) => {
+    if (!dom.inputs[key]) {
+      return;
+    }
+
     if (dom.inputs[key].type === "checkbox") {
       dom.inputs[key].checked = Boolean(value);
     } else {
@@ -1355,6 +1592,11 @@ function readSettingsForm() {
   for (const [key, input] of Object.entries(dom.inputs)) {
     if (input.type === "checkbox") {
       nextSettings[key] = input.checked;
+      continue;
+    }
+
+    if (key === "bankTheme") {
+      nextSettings[key] = BANK_THEME_VALUES.has(input.value) ? input.value : DEFAULT_SETTINGS.bankTheme;
       continue;
     }
 
