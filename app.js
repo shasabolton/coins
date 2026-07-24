@@ -19,10 +19,18 @@ const PRESENT_REVEAL_MS = 4000;
 const PRESENT_CONFETTI_PIECES = 30;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 const BANK_THEME_VALUES = new Set(["bank", "tree"]);
-const TREE_ROOT_Y = 84;
-const TREE_BASE_Y = 96;
-const TREE_MIN_COORD = 7;
-const TREE_MAX_COORD = 93;
+const TREE_GRID_SLOTS = [
+  { x: 28, y: 23 },
+  { x: 72, y: 23 },
+  { x: 28, y: 50 },
+  { x: 72, y: 50 },
+  { x: 28, y: 77 },
+  { x: 72, y: 77 },
+];
+const TREE_ENVELOPE_RADIUS = 11.5;
+const TREE_INITIAL_BRANCH_LENGTH = 6.4;
+const TREE_BRANCH_SHRINK = 0.58;
+const TREE_BRANCH_FORK_ANGLE = Math.PI * 0.42;
 
 const PRESETS = {
   easy: {
@@ -166,40 +174,122 @@ function isTreeBankTheme(settings = state?.settings) {
 }
 
 function treeCoinScale(depth = 0) {
-  return clamp(1 - depth * 0.13, 0.4, 1);
+  return clamp(0.9 - depth * 0.08, 0.36, 0.9);
 }
 
 function treeBranchWidth(depth = 0) {
-  return clamp(6 - depth * 0.7, 2, 6);
+  return clamp(4.5 - depth * 0.45, 1.4, 4.5);
 }
 
-function treeRootNode(xPercent) {
-  const x = clamp(xPercent, TREE_MIN_COORD, TREE_MAX_COORD);
+function treeSlotBaseAngle(slotIndex) {
+  const column = slotIndex % 2;
+  const row = Math.floor(slotIndex / 2);
+  const columnTilt = column === 0 ? 0.18 : -0.18;
+  const rowTilt = (row - 1) * 0.08;
+
+  return -Math.PI / 2 + columnTilt + rowTilt;
+}
+
+function treeRootNode(slotIndex, treeId) {
+  const slot = TREE_GRID_SLOTS[slotIndex] ?? TREE_GRID_SLOTS[0];
 
   return {
+    treeId,
+    treeSlot: slotIndex,
     treeDepth: 0,
-    treeX: x,
-    treeY: TREE_ROOT_Y,
-    treeParentX: x,
-    treeParentY: TREE_BASE_Y,
+    treeX: slot.x,
+    treeY: slot.y,
+    treeRootX: slot.x,
+    treeRootY: slot.y,
+    treeAngle: treeSlotBaseAngle(slotIndex),
+    treeNextBranchLength: TREE_INITIAL_BRANCH_LENGTH,
   };
 }
 
-function nextTreeChildNodes(coin) {
+function fitPointToTreeEnvelope(rootX, rootY, x, y) {
+  const dx = x - rootX;
+  const dy = y - rootY;
+  const distance = Math.hypot(dx, dy);
+
+  if (distance <= TREE_ENVELOPE_RADIUS) {
+    return { x, y };
+  }
+
+  const ratio = TREE_ENVELOPE_RADIUS / distance;
+
+  return {
+    x: rootX + dx * ratio,
+    y: rootY + dy * ratio,
+  };
+}
+
+function createTreeBranchRecord(childNode, startedAt) {
+  const branch = {
+    id: state.nextTreeBranchId,
+    treeId: childNode.treeId,
+    depth: childNode.treeDepth,
+    fromX: childNode.treeParentX,
+    fromY: childNode.treeParentY,
+    toX: childNode.treeX,
+    toY: childNode.treeY,
+    startedAt,
+    completesAt: startedAt + BANK_SPLIT_ANIMATION_MS,
+    complete: false,
+  };
+
+  state.nextTreeBranchId += 1;
+  state.treeBranches.push(branch);
+  return branch.id;
+}
+
+function finishTreeBranch(branchId) {
+  const branch = state.treeBranches.find((item) => item.id === branchId);
+
+  if (branch) {
+    branch.complete = true;
+  }
+}
+
+function removeTreeBranch(branchId) {
+  state.treeBranches = state.treeBranches.filter((branch) => branch.id !== branchId);
+}
+
+function nextTreeChildNodes(coin, timestamp) {
   const depth = coin.treeDepth ?? 0;
   const childDepth = depth + 1;
-  const spread = clamp(22 * 0.74 ** depth, 5, 22);
-  const rise = clamp(20 * 0.86 ** depth, 8, 20);
+  const branchLength = coin.treeNextBranchLength ?? TREE_INITIAL_BRANCH_LENGTH;
+  const forkAngle = TREE_BRANCH_FORK_ANGLE * 0.86 ** depth;
   const parentX = coin.treeX ?? 50;
-  const parentY = coin.treeY ?? TREE_ROOT_Y;
+  const parentY = coin.treeY ?? 50;
+  const rootX = coin.treeRootX ?? parentX;
+  const rootY = coin.treeRootY ?? parentY;
+  const parentAngle = coin.treeAngle ?? -Math.PI / 2;
 
-  return [-1, 1].map((side) => ({
-    treeDepth: childDepth,
-    treeX: clamp(parentX + spread * side, TREE_MIN_COORD, TREE_MAX_COORD),
-    treeY: clamp(parentY - rise, TREE_MIN_COORD, TREE_ROOT_Y),
-    treeParentX: parentX,
-    treeParentY: parentY,
-  }));
+  return [-1, 1].map((side) => {
+    const angle = parentAngle + side * forkAngle;
+    const point = fitPointToTreeEnvelope(
+      rootX,
+      rootY,
+      parentX + Math.cos(angle) * branchLength,
+      parentY + Math.sin(angle) * branchLength,
+    );
+    const childNode = {
+      treeId: coin.treeId,
+      treeSlot: coin.treeSlot,
+      treeDepth: childDepth,
+      treeX: point.x,
+      treeY: point.y,
+      treeRootX: rootX,
+      treeRootY: rootY,
+      treeParentX: parentX,
+      treeParentY: parentY,
+      treeAngle: angle,
+      treeNextBranchLength: branchLength * TREE_BRANCH_SHRINK,
+    };
+
+    childNode.treeBranchId = createTreeBranchRecord(childNode, timestamp);
+    return childNode;
+  });
 }
 
 function shuffle(items) {
@@ -226,11 +316,17 @@ function createCoin(location, timestamp) {
     treeSproutChildren: null,
     splitAngle: 0,
     particle: null,
+    treeId: null,
+    treeSlot: null,
     treeDepth: 0,
     treeX: 50,
-    treeY: TREE_ROOT_Y,
-    treeParentX: 50,
-    treeParentY: TREE_BASE_Y,
+    treeY: 50,
+    treeRootX: 50,
+    treeRootY: 50,
+    treeParentX: null,
+    treeParentY: null,
+    treeAngle: -Math.PI / 2,
+    treeNextBranchLength: TREE_INITIAL_BRANCH_LENGTH,
     remainingMs: depreciationMs(),
   };
 
@@ -456,6 +552,16 @@ function clearBankSplit(coin) {
   coin.treeSproutChildren = null;
 }
 
+function cancelBankSplit(coin) {
+  if (coin.treeSproutChildren) {
+    for (const childNode of coin.treeSproutChildren) {
+      removeTreeBranch(childNode.treeBranchId);
+    }
+  }
+
+  clearBankSplit(coin);
+}
+
 function particleItemsFor(location) {
   const coins = state.coins.filter((coin) => coin.location === location && drag?.id !== coin.id);
   const items = [];
@@ -624,6 +730,10 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     settings: effectiveSettings,
     coins: [],
     nextCoinId: 1,
+    nextTreeId: 1,
+    nextTreeBranchId: 1,
+    treeRoots: [],
+    treeBranches: [],
     wageCoinsIssued: 0,
     gameTime: timestamp,
     lastClockTick: null,
@@ -768,7 +878,7 @@ function beginSplit(coin, timestamp) {
     clearBankSplit(coin);
     coin.splitStartedAt = timestamp;
     coin.splitCompletesAt = timestamp + BANK_SPLIT_ANIMATION_MS;
-    coin.treeSproutChildren = nextTreeChildNodes(coin);
+    coin.treeSproutChildren = nextTreeChildNodes(coin, timestamp);
     return;
   }
 
@@ -828,6 +938,7 @@ function completeSplit(coin, timestamp) {
     const childNodes = coin.treeSproutChildren;
 
     for (const childNode of childNodes) {
+      finishTreeBranch(childNode.treeBranchId);
       createBankCoin(timestamp, null, childNode);
     }
 
@@ -947,7 +1058,7 @@ function createCoinElement(coin, timestamp, location) {
 
   if (location === "bank" && isTreeBankTheme()) {
     element.style.setProperty("--x", `${coin.treeX ?? 50}%`);
-    element.style.setProperty("--y", `${coin.treeY ?? TREE_ROOT_Y}%`);
+    element.style.setProperty("--y", `${coin.treeY ?? 50}%`);
   } else if (location === "purse" || location === "bank") {
     const particle = ensureParticle(coin, location);
     element.style.setProperty("--x", `${particle.x}px`);
@@ -1036,6 +1147,14 @@ function createTreeBloomCoinElement(childNode, progress) {
   return element;
 }
 
+function treeBranchProgress(branch, timestamp) {
+  if (branch.complete || branch.completesAt === null || branch.startedAt === null) {
+    return 1;
+  }
+
+  return clamp((timestamp - branch.startedAt) / (branch.completesAt - branch.startedAt), 0, 1);
+}
+
 function createSplitChildElement(coin) {
   if (!coin.splitChildParticle || drag?.id === coin.id) {
     return null;
@@ -1055,31 +1174,24 @@ function renderTreeBankCoins(fragment, bankCoins, timestamp) {
   const coins = document.createDocumentFragment();
   const splitTimestamp = bankSplitRenderTimestamp(timestamp);
 
-  for (const coin of bankCoins) {
+  for (const branch of state.treeBranches) {
     branches.append(
       createTreeBranchElement(
-        coin.treeParentX ?? coin.treeX ?? 50,
-        coin.treeParentY ?? TREE_BASE_Y,
-        coin.treeX ?? 50,
-        coin.treeY ?? TREE_ROOT_Y,
-        coin.treeDepth ?? 0,
+        branch.fromX,
+        branch.fromY,
+        branch.toX,
+        branch.toY,
+        branch.depth,
+        treeBranchProgress(branch, splitTimestamp),
       ),
     );
+  }
 
+  for (const coin of bankCoins) {
     if (coin.treeSproutChildren) {
       const progress = splitProgress(coin, splitTimestamp);
 
       for (const childNode of coin.treeSproutChildren) {
-        branches.append(
-          createTreeBranchElement(
-            childNode.treeParentX,
-            childNode.treeParentY,
-            childNode.treeX,
-            childNode.treeY,
-            childNode.treeDepth,
-            progress,
-          ),
-        );
         bloomCoins.append(createTreeBloomCoinElement(childNode, progress));
       }
     }
@@ -1314,7 +1426,7 @@ function highlightTarget(event) {
 
 function startDrag(event, coin) {
   if (isTreeBankTheme() && coin.location === "bank" && hasActiveBankSplit(coin)) {
-    clearBankSplit(coin);
+    cancelBankSplit(coin);
     setMessage("Picked coin stopped blooming on that branch.");
 
     if (!state.coins.some((bankCoin) => bankCoin.location === "bank" && hasActiveBankSplit(bankCoin))) {
@@ -1441,9 +1553,8 @@ function feedRobot(coin) {
 
   coin.location = "robot";
   coin.expiresAt = null;
-  clearBankSplit(coin);
+  cancelBankSplit(coin);
   coin.particle = null;
-  coin.treeSproutChildren = null;
   coin.remainingMs = depreciationMs();
   state.robotStack.push(coin.id);
   setMessage("The robot ate a coin and stacked it in his tummy.");
@@ -1461,11 +1572,60 @@ function placeParticleFromEvent(coin, location, event) {
   };
 }
 
+function closestTreeSlotIndex(xPercent, yPercent) {
+  let closestIndex = 0;
+  let closestDistance = Infinity;
+
+  TREE_GRID_SLOTS.forEach((slot, index) => {
+    const distance = Math.hypot(slot.x - xPercent, slot.y - yPercent);
+
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestIndex = index;
+    }
+  });
+
+  return closestIndex;
+}
+
+function chooseTreeSlot(preferredIndex) {
+  const usedSlots = new Set(state.treeRoots.map((root) => root.slotIndex));
+
+  if (!usedSlots.has(preferredIndex)) {
+    return preferredIndex;
+  }
+
+  const preferredSlot = TREE_GRID_SLOTS[preferredIndex];
+  let openSlotIndex = null;
+  let openSlotDistance = Infinity;
+
+  TREE_GRID_SLOTS.forEach((slot, index) => {
+    if (usedSlots.has(index)) {
+      return;
+    }
+
+    const distance = Math.hypot(slot.x - preferredSlot.x, slot.y - preferredSlot.y);
+
+    if (distance < openSlotDistance) {
+      openSlotDistance = distance;
+      openSlotIndex = index;
+    }
+  });
+
+  return openSlotIndex ?? preferredIndex;
+}
+
 function placeTreeRootFromEvent(coin, event) {
   const area = particleArea("bank");
   const rect = area.element.getBoundingClientRect();
   const xPercent = ((event.clientX - rect.left) / Math.max(1, area.width)) * 100;
-  Object.assign(coin, treeRootNode(xPercent));
+  const yPercent = ((event.clientY - rect.top) / Math.max(1, area.height)) * 100;
+  const slotIndex = chooseTreeSlot(closestTreeSlotIndex(xPercent, yPercent));
+  const treeId = state.nextTreeId;
+
+  state.nextTreeId += 1;
+  state.treeRoots.push({ id: treeId, slotIndex });
+  Object.assign(coin, treeRootNode(slotIndex, treeId));
   coin.particle = null;
 }
 
