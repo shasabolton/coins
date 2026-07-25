@@ -14,9 +14,10 @@ const PARTICLE_MIN_SPEED = 6;
 const PARTICLE_MAX_SPEED = 18;
 const PARTICLE_DAMPING = 0.996;
 const SPLIT_PUSH_SPEED = 30;
-const BANK_SPLIT_ANIMATION_MS = 1000;
+const BANK_SPLIT_ANIMATION_MS = 2000;
 const PRESENT_REVEAL_MS = 4000;
 const PRESENT_CONFETTI_PIECES = 30;
+const PURSE_DROP_MS = 520;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 const BANK_THEME_VALUES = new Set(["bank", "tree"]);
 const TREE_GRID_SLOTS = [
@@ -92,6 +93,7 @@ const dom = {
   bankTotal: document.querySelector("#bank-total"),
   bankInterestProgress: document.querySelector("#bank-interest-progress"),
   presentGrid: document.querySelector("#present-grid"),
+  purseReserve: document.querySelector("#purse-reserve"),
   purseCoins: document.querySelector("#purse-coins"),
   bankCoins: document.querySelector("#bank-coins"),
   bankZone: document.querySelector(".zone--bank"),
@@ -322,6 +324,10 @@ function createCoin(location, timestamp) {
     treeSproutChildren: null,
     splitAngle: 0,
     particle: null,
+    dropStartedAt: null,
+    dropCompletesAt: null,
+    dropFromX: null,
+    dropFromY: null,
     treeId: null,
     treeSlot: null,
     treeDepth: 0,
@@ -350,10 +356,65 @@ function createPurseCoin(timestamp) {
     return null;
   }
 
+  const remainingBefore = state.settings.lifetime - state.wageCoinsIssued;
+  const dropOrigin = readPurseReserveDropOrigin(remainingBefore - 1);
+  const now = performance.now();
   const coin = createCoin("purse", timestamp);
+  const area = particleArea("purse");
+
   coin.expiresAt = timestamp + depreciationMs();
+  coin.dropStartedAt = now;
+  coin.dropCompletesAt = now + PURSE_DROP_MS;
+  coin.dropFromX = dropOrigin.x;
+  coin.dropFromY = dropOrigin.y;
+  coin.particle = {
+    x: clamp(dropOrigin.x + randomBetween(-18, 18), area.radius, area.width - area.radius),
+    y: clamp(randomBetween(area.height * 0.38, area.height * 0.78), area.radius, area.height - area.radius),
+    vx: randomBetween(-10, 10),
+    vy: randomBetween(PARTICLE_MIN_SPEED, PARTICLE_MAX_SPEED),
+  };
   state.wageCoinsIssued += 1;
   return coin;
+}
+
+function readPurseReserveDropOrigin(index) {
+  const area = particleArea("purse");
+  const reserveCoins = dom.purseReserve?.querySelectorAll(".purse-reserve-coin");
+  const slot = reserveCoins?.[index] ?? reserveCoins?.[reserveCoins.length - 1];
+
+  if (slot && area.element) {
+    const slotRect = slot.getBoundingClientRect();
+    const trayRect = area.element.getBoundingClientRect();
+
+    return {
+      x: slotRect.left + slotRect.width / 2 - trayRect.left,
+      y: slotRect.top + slotRect.height / 2 - trayRect.top,
+    };
+  }
+
+  return {
+    x: area.width / 2,
+    y: -10,
+  };
+}
+
+function isPurseCoinDropping(coin) {
+  return coin.location === "purse" && coin.dropCompletesAt !== null && performance.now() < coin.dropCompletesAt;
+}
+
+function purseDropProgress(coin) {
+  if (coin.dropCompletesAt === null || coin.dropStartedAt === null) {
+    return 1;
+  }
+
+  return clamp((performance.now() - coin.dropStartedAt) / (coin.dropCompletesAt - coin.dropStartedAt), 0, 1);
+}
+
+function clearPurseDrop(coin) {
+  coin.dropStartedAt = null;
+  coin.dropCompletesAt = null;
+  coin.dropFromX = null;
+  coin.dropFromY = null;
 }
 
 function createRobotCoin(timestamp) {
@@ -578,6 +639,10 @@ function particleItemsFor(location) {
   const area = particleArea(location);
 
   for (const coin of coins) {
+    if (isPurseCoinDropping(coin)) {
+      continue;
+    }
+
     items.push({
       id: coin.id,
       kind: "coin",
@@ -682,10 +747,11 @@ function updateParticlePhysics(timestamp) {
 
   const bankSplitTimestamp =
     state.settings.staticMode && state.bankSplitRealStartedAt !== null ? timestamp : gameNow();
+  const presentAnimationActive = hasActivePresentReveal(timestamp);
 
   updateParticleGroup("purse", dt, timestamp, gameNow());
 
-  if (!isTreeBankTheme()) {
+  if (!isTreeBankTheme() && !presentAnimationActive) {
     updateParticleGroup("bank", dt, timestamp, bankSplitTimestamp);
   }
 }
@@ -756,6 +822,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     bankSplitRealStartedAt: null,
     bankSplitRealCompletesAt: null,
     bankRevealPauseLastAt: null,
+    purseAnimationPauseLastAt: null,
     robotStack: [],
     robotLastTick: timestamp,
     robotPauseBudgetMs: 0,
@@ -777,6 +844,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     createRobotCoin(timestamp);
   }
 
+  renderPurseReserve();
   createPurseCoin(timestamp);
   render(timestamp);
 }
@@ -805,7 +873,12 @@ function processIncome(timestamp) {
     return;
   }
 
-  if (timestamp < state.nextPayAt) {
+  if (
+    timestamp < state.nextPayAt ||
+    hasActivePresentReveal() ||
+    hasActiveBankAnimation() ||
+    hasActivePurseDrop()
+  ) {
     return;
   }
 
@@ -814,7 +887,42 @@ function processIncome(timestamp) {
   setMessage("A new wage coin dropped into the purse.");
 }
 
-function processPurse(timestamp) {
+function hasActivePurseDrop(realTimestamp = performance.now()) {
+  return state.coins.some(
+    (coin) =>
+      coin.location === "purse" &&
+      coin.dropCompletesAt !== null &&
+      realTimestamp < coin.dropCompletesAt,
+  );
+}
+
+function pausePurseAnimations(realTimestamp) {
+  if (state.purseAnimationPauseLastAt === null) {
+    state.purseAnimationPauseLastAt = realTimestamp;
+    return;
+  }
+
+  const pauseDelta = Math.max(0, realTimestamp - state.purseAnimationPauseLastAt);
+  state.purseAnimationPauseLastAt = realTimestamp;
+
+  for (const coin of state.coins) {
+    if (coin.location !== "purse" || coin.dropCompletesAt === null) {
+      continue;
+    }
+
+    coin.dropStartedAt += pauseDelta;
+    coin.dropCompletesAt += pauseDelta;
+    coin.expiresAt += pauseDelta;
+  }
+}
+
+function processPurse(timestamp, realTimestamp = performance.now()) {
+  if (hasActivePresentReveal(realTimestamp) || hasActiveBankAnimation()) {
+    pausePurseAnimations(realTimestamp);
+  } else {
+    state.purseAnimationPauseLastAt = null;
+  }
+
   state.coins = state.coins.filter((coin) => {
     if (coin.location !== "purse" || drag?.id === coin.id) {
       return true;
@@ -922,6 +1030,31 @@ function splitProgress(coin, timestamp) {
   return clamp((timestamp - coin.splitStartedAt) / (coin.splitCompletesAt - coin.splitStartedAt), 0, 1);
 }
 
+function splitSeparationProgress(progress) {
+  const t = clamp(progress, 0, 1);
+  // Stay overlapped longer, then stretch and snap apart.
+  return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function splitDeform(progress) {
+  const t = clamp(progress, 0, 1);
+  const bulge = Math.sin(Math.min(t, 0.92) * Math.PI);
+  const pinch = clamp((t - 0.55) / 0.35, 0, 1);
+
+  return {
+    along: 1 + bulge * 0.34 - pinch * 0.06,
+    across: 1 - bulge * 0.22 + pinch * 0.04,
+  };
+}
+
+function splitBridgeThickness(progress, radius) {
+  const t = clamp(progress, 0, 1);
+  const pinch = clamp((t - 0.38) / 0.5, 0, 1);
+  const waist = Math.pow(1 - pinch, 1.65);
+
+  return radius * 1.9 * waist;
+}
+
 function pushSplitChildFromParent(coin, dt, timestamp) {
   if (!coin.splitChildParticle || !coin.particle) {
     return;
@@ -931,12 +1064,12 @@ function pushSplitChildFromParent(coin, dt, timestamp) {
   const parent = coin.particle;
   const progress = splitProgress(coin, timestamp);
   const radius = particleRadius("bank");
-  const targetDistance = radius * 2.25 * progress;
+  const targetDistance = radius * 2.55 * splitSeparationProgress(progress);
   const targetX = parent.x + Math.cos(coin.splitAngle) * targetDistance;
   const targetY = parent.y + Math.sin(coin.splitAngle) * targetDistance;
   const pullX = targetX - child.x;
   const pullY = targetY - child.y;
-  const spring = 9 * dt;
+  const spring = 11 * dt;
 
   child.vx += pullX * spring;
   child.vy += pullY * spring;
@@ -1093,6 +1226,10 @@ function processBank(timestamp, realTimestamp = timestamp) {
   setMessage(`${coinsToSplit.length} bank coin${coinsToSplit.length === 1 ? " is" : "s are"} splitting.`);
 }
 
+function hasActiveBankAnimation() {
+  return state.bankSplitCompletesAt !== null;
+}
+
 function checkWinOrLoss() {
   if (state.openedCount === state.presents.length) {
     endGame("won", "presents");
@@ -1114,10 +1251,10 @@ function tick(timestamp) {
   const gameTimestamp = advanceGameClock(timestamp);
 
   if (state.status === "playing") {
-    processIncome(gameTimestamp);
-    processPurse(gameTimestamp);
-    processRobot(gameTimestamp);
     processBank(gameTimestamp, timestamp);
+    processPurse(gameTimestamp, timestamp);
+    processIncome(gameTimestamp);
+    processRobot(gameTimestamp);
     checkWinOrLoss();
   }
 
@@ -1142,8 +1279,23 @@ function createCoinElement(coin, timestamp, location) {
     element.style.setProperty("--y", `${coin.treeY ?? 50}%`);
   } else if (location === "purse" || location === "bank") {
     const particle = ensureParticle(coin, location);
-    element.style.setProperty("--x", `${particle.x}px`);
-    element.style.setProperty("--y", `${particle.y}px`);
+    const dropProgress = location === "purse" ? purseDropProgress(coin) : 1;
+
+    if (location === "purse" && dropProgress < 1) {
+      const eased = dropProgress * dropProgress;
+      const x = coin.dropFromX + (particle.x - coin.dropFromX) * dropProgress;
+      const y = coin.dropFromY + (particle.y - coin.dropFromY) * eased;
+      element.classList.add("is-dropping");
+      element.style.setProperty("--x", `${x}px`);
+      element.style.setProperty("--y", `${y}px`);
+    } else {
+      if (location === "purse" && coin.dropCompletesAt !== null) {
+        clearPurseDrop(coin);
+      }
+
+      element.style.setProperty("--x", `${particle.x}px`);
+      element.style.setProperty("--y", `${particle.y}px`);
+    }
   }
 
   if (drag?.id === coin.id) {
@@ -1152,7 +1304,10 @@ function createCoinElement(coin, timestamp, location) {
 
   if (location === "purse") {
     const remaining = (coin.expiresAt - timestamp) / depreciationMs();
-    element.style.setProperty("--scale", clamp(remaining, 0.18, 1).toFixed(2));
+    const endScale = clamp(remaining, 0.18, 1);
+    const dropProgress = purseDropProgress(coin);
+    const scale = dropProgress < 1 ? 0.2 + (endScale - 0.2) * dropProgress : endScale;
+    element.style.setProperty("--scale", scale.toFixed(2));
     element.title = `Disappears in ${formatSeconds(coin.expiresAt - timestamp)}`;
   } else if (location === "robot") {
     const bottomCoinId = state.robotStack[0];
@@ -1172,6 +1327,11 @@ function createCoinElement(coin, timestamp, location) {
 
       if (isTreeBankTheme()) {
         element.style.setProperty("--scale", (treeCoinScale(coin.treeDepth) * (1 - progress)).toFixed(2));
+      } else {
+        const deform = splitDeform(progress);
+        element.style.setProperty("--split-angle", `${coin.splitAngle}rad`);
+        element.style.setProperty("--split-along", deform.along.toFixed(3));
+        element.style.setProperty("--split-across", deform.across.toFixed(3));
       }
 
       element.title =
@@ -1247,16 +1407,56 @@ function treeBranchProgress(branch, timestamp) {
   return clamp((timestamp - branch.startedAt) / (branch.completesAt - branch.startedAt), 0, 1);
 }
 
-function createSplitChildElement(coin) {
+function createSplitChildElement(coin, timestamp) {
   if (!coin.splitChildParticle || drag?.id === coin.id) {
     return null;
   }
 
+  const progress = splitProgress(coin, bankSplitRenderTimestamp(timestamp));
+  const deform = splitDeform(progress);
+  const grow = 0.7 + 0.3 * clamp(progress / 0.42, 0, 1);
   const element = document.createElement("span");
-  element.className = "coin coin--bank split-child-particle";
+  element.className = "coin coin--bank split-child-particle is-splitting-child";
   element.setAttribute("aria-hidden", "true");
   element.style.setProperty("--x", `${coin.splitChildParticle.x}px`);
   element.style.setProperty("--y", `${coin.splitChildParticle.y}px`);
+  element.style.setProperty("--scale", grow.toFixed(3));
+  element.style.setProperty("--split-angle", `${coin.splitAngle}rad`);
+  element.style.setProperty("--split-along", deform.along.toFixed(3));
+  element.style.setProperty("--split-across", deform.across.toFixed(3));
+  return element;
+}
+
+function createSplitBridgeElement(coin, timestamp) {
+  if (!coin.splitChildParticle || !coin.particle || drag?.id === coin.id) {
+    return null;
+  }
+
+  const progress = splitProgress(coin, bankSplitRenderTimestamp(timestamp));
+  const parent = coin.particle;
+  const child = coin.splitChildParticle;
+  const dx = child.x - parent.x;
+  const dy = child.y - parent.y;
+  const distance = Math.hypot(dx, dy);
+  const radius = particleRadius("bank");
+  const thickness = splitBridgeThickness(progress, radius);
+
+  if (distance < radius * 0.2 || thickness < 1.5 || progress > 0.97) {
+    return null;
+  }
+
+  const fade = 1 - clamp((progress - 0.78) / 0.19, 0, 1);
+  const waist = clamp(thickness / (radius * 1.9), 0, 1);
+  const element = document.createElement("span");
+  element.className = "split-goo-bridge";
+  element.setAttribute("aria-hidden", "true");
+  element.style.setProperty("--x", `${(parent.x + child.x) / 2}px`);
+  element.style.setProperty("--y", `${(parent.y + child.y) / 2}px`);
+  element.style.setProperty("--length", `${Math.max(distance, thickness)}px`);
+  element.style.setProperty("--thickness", `${thickness}px`);
+  element.style.setProperty("--angle", `${Math.atan2(dy, dx)}rad`);
+  element.style.setProperty("--waist", waist.toFixed(3));
+  element.style.setProperty("--goo-fade", fade.toFixed(3));
   return element;
 }
 
@@ -1299,6 +1499,24 @@ function renderTreeBankCoins(fragment, bankCoins, timestamp) {
   fragment.append(bases, branches, bloomCoins, coins);
 }
 
+function renderPurseReserve() {
+  const remaining = Math.max(0, state.settings.lifetime - state.wageCoinsIssued);
+  const fragment = document.createDocumentFragment();
+
+  for (let index = 0; index < remaining; index += 1) {
+    const element = document.createElement("span");
+    element.className = "purse-reserve-coin";
+    element.setAttribute("aria-hidden", "true");
+    fragment.append(element);
+  }
+
+  dom.purseReserve.replaceChildren(fragment);
+  dom.purseReserve.setAttribute(
+    "aria-label",
+    `${remaining} wage coin${remaining === 1 ? "" : "s"} remaining`,
+  );
+}
+
 function renderCoins(timestamp) {
   const purseFragment = document.createDocumentFragment();
   const bankFragment = document.createDocumentFragment();
@@ -1318,7 +1536,12 @@ function renderCoins(timestamp) {
     renderTreeBankCoins(bankFragment, bankCoins, timestamp);
   } else {
     for (const coin of bankCoins) {
-      const splitChild = createSplitChildElement(coin);
+      const splitBridge = createSplitBridgeElement(coin, timestamp);
+      const splitChild = createSplitChildElement(coin, timestamp);
+
+      if (splitBridge) {
+        bankFragment.append(splitBridge);
+      }
 
       if (splitChild) {
         bankFragment.append(splitChild);
@@ -1485,6 +1708,7 @@ function render(timestamp = performance.now()) {
   renderStatus();
   renderPresents();
   renderRobotSizing();
+  renderPurseReserve();
   renderCoins(timestamp);
   renderResultOverlay();
 }
@@ -1542,10 +1766,46 @@ function startDrag(event, coin) {
   ghost.setAttribute("aria-hidden", "true");
 
   if (coin.splitChildParticle && coin.particle) {
+    const dx = coin.splitChildParticle.x - coin.particle.x;
+    const dy = coin.splitChildParticle.y - coin.particle.y;
+    const distance = Math.hypot(dx, dy);
+    const radius = particleRadius("bank");
+    const progress =
+      coin.splitCompletesAt !== null && coin.splitStartedAt !== null
+        ? splitProgress(coin, bankSplitRenderTimestamp(gameNow()))
+        : 1;
+    const thickness = splitBridgeThickness(progress, radius);
+    const deform = splitDeform(progress);
+
+    ghost.classList.add("is-splitting");
+    ghost.style.setProperty("--split-angle", `${coin.splitAngle}rad`);
+    ghost.style.setProperty("--split-along", deform.along.toFixed(3));
+    ghost.style.setProperty("--split-across", deform.across.toFixed(3));
+
+    if (distance >= radius * 0.2 && thickness >= 1.5 && progress <= 0.97) {
+      const bridge = document.createElement("span");
+      const fade = 1 - clamp((progress - 0.78) / 0.19, 0, 1);
+      const waist = clamp(thickness / (radius * 1.9), 0, 1);
+      bridge.className = "split-goo-bridge drag-split-bridge";
+      bridge.style.setProperty("--drag-child-x", `${dx / 2}px`);
+      bridge.style.setProperty("--drag-child-y", `${dy / 2}px`);
+      bridge.style.setProperty("--length", `${Math.max(distance, thickness)}px`);
+      bridge.style.setProperty("--thickness", `${thickness}px`);
+      bridge.style.setProperty("--angle", `${Math.atan2(dy, dx)}rad`);
+      bridge.style.setProperty("--waist", waist.toFixed(3));
+      bridge.style.setProperty("--goo-fade", fade.toFixed(3));
+      ghost.append(bridge);
+    }
+
     const child = document.createElement("span");
-    child.className = "coin drag-split-child";
-    child.style.setProperty("--drag-child-x", `${coin.splitChildParticle.x - coin.particle.x}px`);
-    child.style.setProperty("--drag-child-y", `${coin.splitChildParticle.y - coin.particle.y}px`);
+    const grow = 0.7 + 0.3 * clamp(progress / 0.42, 0, 1);
+    child.className = "coin drag-split-child is-splitting-child";
+    child.style.setProperty("--drag-child-x", `${dx}px`);
+    child.style.setProperty("--drag-child-y", `${dy}px`);
+    child.style.setProperty("--scale", grow.toFixed(3));
+    child.style.setProperty("--split-angle", `${coin.splitAngle}rad`);
+    child.style.setProperty("--split-along", deform.along.toFixed(3));
+    child.style.setProperty("--split-across", deform.across.toFixed(3));
     ghost.append(child);
   }
 
@@ -1818,10 +2078,29 @@ function openPresent(coin, presentIndex, sourceElement) {
     return false;
   }
 
+  if (hasActivePresentReveal()) {
+    setMessage("Wait for the current present to finish opening.");
+    return false;
+  }
+
+  const revealStartedAt = performance.now();
+
   present.opened = true;
-  present.revealEndsAt = performance.now() + PRESENT_REVEAL_MS;
+  present.revealEndsAt = revealStartedAt + PRESENT_REVEAL_MS;
   state.openedCount += 1;
   removeCoin(coin.id);
+
+  if (hasActiveBankAnimation()) {
+    state.bankRevealPauseLastAt = {
+      game: gameNow(),
+      real: revealStartedAt,
+    };
+  }
+
+  if (hasActivePurseDrop(revealStartedAt)) {
+    state.purseAnimationPauseLastAt = revealStartedAt;
+  }
+
   playPresentReveal(present, sourceElement);
   setMessage(`The present opened and revealed ${present.emoji}.`);
   checkWinOrLoss();

@@ -393,8 +393,31 @@ h2 {
 
 .zone--purse {
   display: grid;
-  grid-template-rows: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   background: linear-gradient(160deg, #fff6df, #ffe3b2);
+}
+
+.purse-reserve {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: center;
+  gap: 2px;
+  min-height: 12px;
+  padding: clamp(3px, 0.6dvh, 5px) clamp(5px, 1.5vw, 8px) clamp(2px, 0.4dvh, 4px);
+  border-bottom: 1px solid rgba(37, 27, 19, 0.08);
+}
+
+.purse-reserve-coin {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border: 1px solid #c7841f;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 28%, #ffeaa5 0 28%, transparent 29%),
+    radial-gradient(circle, #ffd85f, var(--gold) 62%, var(--gold-dark));
+  box-shadow: inset 0 -1px 1px rgba(115, 66, 7, 0.22);
 }
 
 .zone--bank {
@@ -475,6 +498,7 @@ h2 {
   align-items: center;
   align-content: center;
   flex-wrap: nowrap;
+  overflow: visible;
 }
 
 .coin-tray--particles .coin {
@@ -565,6 +589,16 @@ h2 {
   opacity: 0.22;
 }
 
+.coin.is-dropping {
+  z-index: 4;
+  pointer-events: none;
+  transition: none;
+}
+
+.coin-tray--particles .coin.is-dropping:hover {
+  transform: translate(-50%, -50%) scale(var(--scale));
+}
+
 .coin.is-bottom {
   box-shadow:
     inset 0 -5px 8px rgba(115, 66, 7, 0.18),
@@ -575,22 +609,86 @@ h2 {
 .coin.is-splitting {
   overflow: visible;
   z-index: 2;
+  transition: none;
 }
 
 .coin.is-splitting::before {
   position: absolute;
-  inset: 0;
-  z-index: 1;
-  border-radius: inherit;
+  inset: -18%;
+  z-index: 0;
+  border-radius: 50%;
   background:
-    radial-gradient(circle at 34% 28%, #ffeaa5 0 19%, transparent 20%),
-    radial-gradient(circle, #ffd85f, var(--gold) 62%, var(--gold-dark));
+    radial-gradient(circle at 34% 28%, rgba(255, 234, 165, 0.9) 0 18%, transparent 19%),
+    radial-gradient(circle, rgba(255, 216, 95, 0.55), rgba(247, 183, 51, 0.2) 58%, transparent 72%);
   content: "";
+  filter: blur(1.5px);
+  opacity: 0.55;
+  pointer-events: none;
 }
 
 .coin.is-splitting::after {
   position: relative;
   z-index: 2;
+}
+
+.coin-tray--particles .coin.is-splitting,
+.coin-tray--particles .split-child-particle.is-splitting-child {
+  --split-angle: 0rad;
+  --split-along: 1;
+  --split-across: 1;
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--split-angle))
+    scale(calc(var(--scale) * var(--split-along)), calc(var(--scale) * var(--split-across)))
+    rotate(calc(var(--split-angle) * -1));
+}
+
+.coin-tray--particles .coin.is-splitting:hover,
+.coin-tray--particles .split-child-particle.is-splitting-child:hover {
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--split-angle))
+    scale(calc(var(--scale) * var(--split-along) * 1.04), calc(var(--scale) * var(--split-across) * 1.04))
+    rotate(calc(var(--split-angle) * -1));
+}
+
+.split-goo-bridge {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  z-index: 1;
+  width: var(--length);
+  height: var(--thickness);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 30%, #ffeaa5 0 16%, transparent 18%),
+    radial-gradient(ellipse at center, #ffd85f 0 42%, var(--gold) 68%, var(--gold-dark));
+  box-shadow:
+    inset 0 -2px 4px rgba(115, 66, 7, 0.16),
+    0 1px 3px rgba(89, 54, 12, 0.12);
+  opacity: calc(var(--goo-fade, 1) * 0.96);
+  pointer-events: none;
+  transform: translate(-50%, -50%) rotate(var(--angle)) scaleY(calc(0.55 + var(--waist) * 0.45));
+  filter: blur(0.35px);
+}
+
+.split-goo-bridge::before {
+  position: absolute;
+  inset: 18% 8%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(255, 244, 196, 0.55), transparent 70%);
+  content: "";
+  transform: scaleY(calc(0.35 + var(--waist) * 0.9));
+}
+
+.split-goo-bridge::after {
+  position: absolute;
+  inset: 28% 22%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, var(--gold-dark), transparent 72%);
+  content: "";
+  opacity: calc((1 - var(--waist)) * 0.55);
+  transform: scaleY(0.55);
 }
 
 .coin--tree {
@@ -675,8 +773,9 @@ h2 {
 
 .split-child-particle {
   z-index: 1;
-  opacity: 0.92;
+  opacity: 0.96;
   pointer-events: none;
+  transition: none;
 }
 
 .coin-ghost {
@@ -687,14 +786,35 @@ h2 {
   transform: translate(-50%, -50%) scale(1.15);
 }
 
+.coin-ghost.is-splitting {
+  transform:
+    translate(-50%, -50%)
+    rotate(var(--split-angle, 0rad))
+    scale(calc(1.15 * var(--split-along, 1)), calc(1.15 * var(--split-across, 1)))
+    rotate(calc(var(--split-angle, 0rad) * -1));
+}
+
 .drag-split-child {
   position: absolute;
   left: 50%;
   top: 50%;
   width: 100%;
   height: 100%;
-  opacity: 0.88;
-  transform: translate(calc(-50% + var(--drag-child-x, 0px)), calc(-50% + var(--drag-child-y, 0px))) scale(0.96);
+  opacity: 0.92;
+  transform:
+    translate(calc(-50% + var(--drag-child-x, 0px)), calc(-50% + var(--drag-child-y, 0px)))
+    rotate(var(--split-angle, 0rad))
+    scale(calc(var(--scale, 1) * var(--split-along, 1)), calc(var(--scale, 1) * var(--split-across, 1)))
+    rotate(calc(var(--split-angle, 0rad) * -1));
+}
+
+.drag-split-bridge {
+  left: 50%;
+  top: 50%;
+  transform:
+    translate(calc(-50% + var(--drag-child-x, 0px)), calc(-50% + var(--drag-child-y, 0px)))
+    rotate(var(--angle))
+    scaleY(calc(0.55 + var(--waist) * 0.45));
 }
 
 .robot {
