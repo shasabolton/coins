@@ -17,7 +17,14 @@ const SPLIT_PUSH_SPEED = 30;
 const BANK_SPLIT_ANIMATION_MS = 2000;
 const PRESENT_REVEAL_MS = 4000;
 const PRESENT_CONFETTI_PIECES = 30;
-const PURSE_DROP_MS = 520;
+const PURSE_DROP_GRAVITY = 720;
+const PURSE_DROP_BOUNCE = 0.52;
+const PURSE_DROP_SETTLE_SPEED = 55;
+const PURSE_DROP_MAX_MS = 7000;
+const CHA_CHING_SRC = "cha-ching.mp3";
+const CHA_CHING_FALLBACK_MS = 1600;
+const COIN_DROP_SRC = "coin-drop.mp3";
+const COIN_DROP_START_SEC = 0.7;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 const BANK_THEME_VALUES = new Set(["bank", "tree"]);
 const TREE_GRID_SLOTS = [
@@ -324,10 +331,11 @@ function createCoin(location, timestamp) {
     treeSproutChildren: null,
     splitAngle: 0,
     particle: null,
+    dropping: false,
     dropStartedAt: null,
-    dropCompletesAt: null,
-    dropFromX: null,
-    dropFromY: null,
+    dropStartY: null,
+    dropBounces: 0,
+    dropSquashUntil: null,
     treeId: null,
     treeSlot: null,
     treeDepth: 0,
@@ -351,6 +359,26 @@ function createCoin(location, timestamp) {
   return coin;
 }
 
+function queuePurseCoinDrop(timestamp) {
+  if (state.wageCoinsIssued >= state.settings.lifetime || state.pendingPurseDrop) {
+    return null;
+  }
+
+  const token = state.nextCoinId;
+  state.pendingPurseDrop = { token, gameTimestamp: timestamp };
+
+  playChaChing(() => {
+    if (!state?.pendingPurseDrop || state.pendingPurseDrop.token !== token) {
+      return;
+    }
+
+    state.pendingPurseDrop = null;
+    createPurseCoin(gameNow());
+  });
+
+  return true;
+}
+
 function createPurseCoin(timestamp) {
   if (state.wageCoinsIssued >= state.settings.lifetime) {
     return null;
@@ -361,17 +389,20 @@ function createPurseCoin(timestamp) {
   const now = performance.now();
   const coin = createCoin("purse", timestamp);
   const area = particleArea("purse");
+  const startX = clamp(dropOrigin.x + randomBetween(-6, 6), area.radius, Math.max(area.radius, area.width - area.radius));
+  const startY = dropOrigin.y;
 
   coin.expiresAt = timestamp + depreciationMs();
+  coin.dropping = true;
   coin.dropStartedAt = now;
-  coin.dropCompletesAt = now + PURSE_DROP_MS;
-  coin.dropFromX = dropOrigin.x;
-  coin.dropFromY = dropOrigin.y;
+  coin.dropStartY = startY;
+  coin.dropBounces = 0;
+  coin.dropSquashUntil = null;
   coin.particle = {
-    x: clamp(dropOrigin.x + randomBetween(-18, 18), area.radius, area.width - area.radius),
-    y: clamp(randomBetween(area.height * 0.38, area.height * 0.78), area.radius, area.height - area.radius),
-    vx: randomBetween(-10, 10),
-    vy: randomBetween(PARTICLE_MIN_SPEED, PARTICLE_MAX_SPEED),
+    x: startX,
+    y: startY,
+    vx: randomBetween(-28, 28),
+    vy: randomBetween(6, 18),
   };
   state.wageCoinsIssued += 1;
   return coin;
@@ -399,22 +430,245 @@ function readPurseReserveDropOrigin(index) {
 }
 
 function isPurseCoinDropping(coin) {
-  return coin.location === "purse" && coin.dropCompletesAt !== null && performance.now() < coin.dropCompletesAt;
-}
-
-function purseDropProgress(coin) {
-  if (coin.dropCompletesAt === null || coin.dropStartedAt === null) {
-    return 1;
-  }
-
-  return clamp((performance.now() - coin.dropStartedAt) / (coin.dropCompletesAt - coin.dropStartedAt), 0, 1);
+  return coin.location === "purse" && coin.dropping;
 }
 
 function clearPurseDrop(coin) {
+  coin.dropping = false;
   coin.dropStartedAt = null;
-  coin.dropCompletesAt = null;
-  coin.dropFromX = null;
-  coin.dropFromY = null;
+  coin.dropStartY = null;
+  coin.dropBounces = 0;
+  coin.dropSquashUntil = null;
+}
+
+function finishPurseDrop(coin) {
+  if (!coin.dropping || !coin.particle) {
+    return;
+  }
+
+  const area = particleArea("purse");
+  const particle = coin.particle;
+  const floatSpeed = randomBetween(PARTICLE_MIN_SPEED, PARTICLE_MAX_SPEED);
+
+  particle.y = clamp(particle.y, area.radius, area.height - area.radius);
+  particle.x = clamp(particle.x, area.radius, area.width - area.radius);
+  particle.vx = randomBetween(-floatSpeed, floatSpeed);
+  particle.vy = -randomBetween(PARTICLE_MIN_SPEED * 0.8, PARTICLE_MAX_SPEED);
+  keepParticleInBounds(particle, area);
+  clearPurseDrop(coin);
+}
+
+function updatePurseDropCoin(coin, area, dt, now) {
+  const particle = coin.particle;
+
+  if (!particle) {
+    clearPurseDrop(coin);
+    return;
+  }
+
+  particle.vy += PURSE_DROP_GRAVITY * dt;
+  particle.vx *= 0.997;
+  particle.x += particle.vx * dt;
+  particle.y += particle.vy * dt;
+
+  const minX = area.radius;
+  const maxX = Math.max(area.radius, area.width - area.radius);
+  const floorY = Math.max(area.radius, area.height - area.radius);
+
+  if (particle.x < minX) {
+    particle.x = minX;
+    particle.vx = Math.abs(particle.vx) * 0.55;
+  } else if (particle.x > maxX) {
+    particle.x = maxX;
+    particle.vx = -Math.abs(particle.vx) * 0.55;
+  }
+
+  if (particle.y >= floorY) {
+    particle.y = floorY;
+
+    if (coin.dropBounces === 0) {
+      playCoinDrop();
+    }
+
+    if (Math.abs(particle.vy) > PURSE_DROP_SETTLE_SPEED && coin.dropBounces < 5) {
+      particle.vy = -Math.abs(particle.vy) * PURSE_DROP_BOUNCE;
+      particle.vx *= 0.82;
+      coin.dropBounces += 1;
+      coin.dropSquashUntil = now + 140;
+    } else {
+      finishPurseDrop(coin);
+      return;
+    }
+  }
+
+  if (coin.dropStartedAt !== null && now - coin.dropStartedAt > PURSE_DROP_MAX_MS) {
+    finishPurseDrop(coin);
+  }
+}
+
+function updatePurseDrops(dt, now, paused) {
+  if (paused || dt <= 0) {
+    return;
+  }
+
+  const area = particleArea("purse");
+
+  for (const coin of state.coins) {
+    if (!isPurseCoinDropping(coin)) {
+      continue;
+    }
+
+    updatePurseDropCoin(coin, area, dt, now);
+  }
+}
+
+function purseDropScale(coin, endScale) {
+  if (!isPurseCoinDropping(coin) || !coin.particle) {
+    return endScale;
+  }
+
+  const area = particleArea("purse");
+  const floorY = Math.max(area.radius, area.height - area.radius);
+  const startY = coin.dropStartY ?? coin.particle.y;
+  const fallRange = Math.max(24, floorY - startY);
+  const progress = clamp((coin.particle.y - startY) / fallRange, 0, 1);
+  return 0.22 + (endScale - 0.22) * Math.min(1, 0.2 + progress * 0.95);
+}
+
+function purseDropSquash(coin, now = performance.now()) {
+  if (!coin.dropSquashUntil || now >= coin.dropSquashUntil) {
+    return { x: 1, y: 1 };
+  }
+
+  const remaining = (coin.dropSquashUntil - now) / 140;
+  const amount = remaining * remaining;
+  return {
+    x: 1 + amount * 0.22,
+    y: 1 - amount * 0.28,
+  };
+}
+
+let chaChingAudio = null;
+let coinDropAudio = null;
+
+function ensureChaChingAudio() {
+  if (!chaChingAudio) {
+    chaChingAudio = new Audio(CHA_CHING_SRC);
+    chaChingAudio.preload = "auto";
+  }
+
+  return chaChingAudio;
+}
+
+function ensureCoinDropAudio() {
+  if (!coinDropAudio) {
+    coinDropAudio = new Audio(COIN_DROP_SRC);
+    coinDropAudio.preload = "auto";
+  }
+
+  return coinDropAudio;
+}
+
+function unlockAudio() {
+  const sounds = [ensureChaChingAudio(), ensureCoinDropAudio()];
+
+  for (const audio of sounds) {
+    if (!audio.paused && !audio.ended) {
+      continue;
+    }
+
+    const previousMuted = audio.muted;
+    audio.muted = true;
+    const playPromise = audio.play();
+
+    if (!playPromise) {
+      audio.muted = previousMuted;
+      continue;
+    }
+
+    playPromise
+      .then(() => {
+        audio.pause();
+        audio.currentTime = 0;
+        audio.muted = false;
+      })
+      .catch(() => {
+        audio.muted = previousMuted;
+      });
+  }
+}
+
+function playCoinDrop() {
+  const template = ensureCoinDropAudio();
+  const audio = template.cloneNode();
+  const startAt = Math.min(
+    COIN_DROP_START_SEC,
+    Number.isFinite(template.duration) && template.duration > 0 ? Math.max(0, template.duration - 0.05) : COIN_DROP_START_SEC,
+  );
+
+  const startPlayback = () => {
+    try {
+      audio.currentTime = startAt;
+    } catch {
+      audio.currentTime = 0;
+    }
+
+    audio.play().catch(() => {});
+  };
+
+  if (audio.readyState >= 1) {
+    startPlayback();
+    return;
+  }
+
+  audio.addEventListener("loadedmetadata", startPlayback, { once: true });
+  audio.load();
+}
+
+function playChaChing(onDropCue) {
+  const template = ensureChaChingAudio();
+  const audio = template.cloneNode();
+  let cued = false;
+
+  const cueDrop = () => {
+    if (cued) {
+      return;
+    }
+
+    cued = true;
+
+    if (typeof onDropCue === "function") {
+      onDropCue();
+    }
+  };
+
+  const fallbackDropMs = CHA_CHING_FALLBACK_MS * 0.5;
+
+  audio.addEventListener("error", cueDrop, { once: true });
+  audio.currentTime = 0;
+
+  const playPromise = audio.play();
+
+  if (!playPromise) {
+    cueDrop();
+    return;
+  }
+
+  playPromise
+    .then(() => {
+      const durationMs =
+        Number.isFinite(audio.duration) && audio.duration > 0
+          ? audio.duration * 1000
+          : Number.isFinite(template.duration) && template.duration > 0
+            ? template.duration * 1000
+            : CHA_CHING_FALLBACK_MS;
+
+      // Start the fall after the "cha-ching" hit, during the ring-out.
+      window.setTimeout(cueDrop, Math.max(0, durationMs * 0.5 - 300));
+    })
+    .catch(cueDrop);
+
+  window.setTimeout(cueDrop, Math.max(0, fallbackDropMs - 300));
 }
 
 function createRobotCoin(timestamp) {
@@ -748,7 +1002,9 @@ function updateParticlePhysics(timestamp) {
   const bankSplitTimestamp =
     state.settings.staticMode && state.bankSplitRealStartedAt !== null ? timestamp : gameNow();
   const presentAnimationActive = hasActivePresentReveal(timestamp);
+  const pausePurseDrops = presentAnimationActive || hasActiveBankAnimation();
 
+  updatePurseDrops(dt, timestamp, pausePurseDrops);
   updateParticleGroup("purse", dt, timestamp, gameNow());
 
   if (!isTreeBankTheme() && !presentAnimationActive) {
@@ -823,6 +1079,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     bankSplitRealCompletesAt: null,
     bankRevealPauseLastAt: null,
     purseAnimationPauseLastAt: null,
+    pendingPurseDrop: null,
     robotStack: [],
     robotLastTick: timestamp,
     robotPauseBudgetMs: 0,
@@ -845,7 +1102,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
   }
 
   renderPurseReserve();
-  createPurseCoin(timestamp);
+  queuePurseCoinDrop(timestamp);
   render(timestamp);
 }
 
@@ -882,18 +1139,13 @@ function processIncome(timestamp) {
     return;
   }
 
-  createPurseCoin(timestamp);
+  queuePurseCoinDrop(timestamp);
   state.nextPayAt = timestamp + payrateMs();
   setMessage("A new wage coin dropped into the purse.");
 }
 
-function hasActivePurseDrop(realTimestamp = performance.now()) {
-  return state.coins.some(
-    (coin) =>
-      coin.location === "purse" &&
-      coin.dropCompletesAt !== null &&
-      realTimestamp < coin.dropCompletesAt,
-  );
+function hasActivePurseDrop() {
+  return Boolean(state.pendingPurseDrop) || state.coins.some((coin) => isPurseCoinDropping(coin));
 }
 
 function pausePurseAnimations(realTimestamp) {
@@ -906,12 +1158,18 @@ function pausePurseAnimations(realTimestamp) {
   state.purseAnimationPauseLastAt = realTimestamp;
 
   for (const coin of state.coins) {
-    if (coin.location !== "purse" || coin.dropCompletesAt === null) {
+    if (!isPurseCoinDropping(coin)) {
       continue;
     }
 
-    coin.dropStartedAt += pauseDelta;
-    coin.dropCompletesAt += pauseDelta;
+    if (coin.dropStartedAt !== null) {
+      coin.dropStartedAt += pauseDelta;
+    }
+
+    if (coin.dropSquashUntil !== null) {
+      coin.dropSquashUntil += pauseDelta;
+    }
+
     coin.expiresAt += pauseDelta;
   }
 }
@@ -1279,20 +1537,15 @@ function createCoinElement(coin, timestamp, location) {
     element.style.setProperty("--y", `${coin.treeY ?? 50}%`);
   } else if (location === "purse" || location === "bank") {
     const particle = ensureParticle(coin, location);
-    const dropProgress = location === "purse" ? purseDropProgress(coin) : 1;
 
-    if (location === "purse" && dropProgress < 1) {
-      const eased = dropProgress * dropProgress;
-      const x = coin.dropFromX + (particle.x - coin.dropFromX) * dropProgress;
-      const y = coin.dropFromY + (particle.y - coin.dropFromY) * eased;
+    if (location === "purse" && isPurseCoinDropping(coin)) {
+      const squash = purseDropSquash(coin);
       element.classList.add("is-dropping");
-      element.style.setProperty("--x", `${x}px`);
-      element.style.setProperty("--y", `${y}px`);
+      element.style.setProperty("--x", `${particle.x}px`);
+      element.style.setProperty("--y", `${particle.y}px`);
+      element.style.setProperty("--drop-sx", squash.x.toFixed(3));
+      element.style.setProperty("--drop-sy", squash.y.toFixed(3));
     } else {
-      if (location === "purse" && coin.dropCompletesAt !== null) {
-        clearPurseDrop(coin);
-      }
-
       element.style.setProperty("--x", `${particle.x}px`);
       element.style.setProperty("--y", `${particle.y}px`);
     }
@@ -1305,8 +1558,7 @@ function createCoinElement(coin, timestamp, location) {
   if (location === "purse") {
     const remaining = (coin.expiresAt - timestamp) / depreciationMs();
     const endScale = clamp(remaining, 0.18, 1);
-    const dropProgress = purseDropProgress(coin);
-    const scale = dropProgress < 1 ? 0.2 + (endScale - 0.2) * dropProgress : endScale;
+    const scale = purseDropScale(coin, endScale);
     element.style.setProperty("--scale", scale.toFixed(2));
     element.title = `Disappears in ${formatSeconds(coin.expiresAt - timestamp)}`;
   } else if (location === "robot") {
@@ -2097,7 +2349,7 @@ function openPresent(coin, presentIndex, sourceElement) {
     };
   }
 
-  if (hasActivePurseDrop(revealStartedAt)) {
+  if (hasActivePurseDrop()) {
     state.purseAnimationPauseLastAt = revealStartedAt;
   }
 
@@ -2259,6 +2511,9 @@ dom.settingsForm.addEventListener("submit", (event) => {
 dom.inputs.start.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
 dom.inputs.feedrate.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
 dom.inputs.staticMode.addEventListener("input", () => updateStaticPayrateInput(true));
+
+window.addEventListener("pointerdown", unlockAudio, { passive: true });
+window.addEventListener("keydown", unlockAudio);
 
 fillSettingsForm(DEFAULT_SETTINGS);
 newGame(DEFAULT_SETTINGS);

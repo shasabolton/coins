@@ -595,8 +595,12 @@ h2 {
   transition: none;
 }
 
+.coin-tray--particles .coin.is-dropping {
+  transform: translate(-50%, -50%) scale(calc(var(--scale) * var(--drop-sx, 1)), calc(var(--scale) * var(--drop-sy, 1)));
+}
+
 .coin-tray--particles .coin.is-dropping:hover {
-  transform: translate(-50%, -50%) scale(var(--scale));
+  transform: translate(-50%, -50%) scale(calc(var(--scale) * var(--drop-sx, 1)), calc(var(--scale) * var(--drop-sy, 1)));
 }
 
 .coin.is-bottom {
