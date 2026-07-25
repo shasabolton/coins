@@ -176,7 +176,7 @@ function isTreeBankTheme(settings = state?.settings) {
 }
 
 function treeCoinScale(depth = 0) {
-  return clamp(0.9 - depth * 0.08, 0.36, 0.9);
+  return clamp(0.9 - depth * 0.12, 0.28, 0.9);
 }
 
 function treeBranchWidth(depth = 0) {
