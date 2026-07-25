@@ -20,18 +20,18 @@ const PRESENT_CONFETTI_PIECES = 30;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 const BANK_THEME_VALUES = new Set(["bank", "tree"]);
 const TREE_GRID_SLOTS = [
-  { x: 28, y: 23 },
-  { x: 72, y: 23 },
-  { x: 28, y: 50 },
-  { x: 72, y: 50 },
-  { x: 28, y: 77 },
-  { x: 72, y: 77 },
+  { x: 24, y: 23 },
+  { x: 76, y: 23 },
+  { x: 24, y: 50 },
+  { x: 76, y: 50 },
+  { x: 24, y: 77 },
+  { x: 76, y: 77 },
 ];
 const TREE_CELL_X_RADIUS = 18;
 const TREE_CELL_TOP_OFFSET = 16;
-const TREE_CELL_BASE_OFFSET = 9.5;
+const TREE_ROW_BASE_OFFSETS = [5.5, 9.5, 14];
 const TREE_INITIAL_BRANCH_LENGTH = 8.8;
-const TREE_BRANCH_SHRINK = 0.66;
+const TREE_BRANCH_SHRINK = 0.72;
 const TREE_BRANCH_FORK_ANGLE = Math.PI * 0.28;
 
 const PRESETS = {
@@ -192,7 +192,8 @@ function treeSlotBaseAngle(slotIndex) {
 
 function treeRootNode(slotIndex, treeId) {
   const slot = TREE_GRID_SLOTS[slotIndex] ?? TREE_GRID_SLOTS[0];
-  const baseY = slot.y + TREE_CELL_BASE_OFFSET;
+  const row = Math.floor(slotIndex / 2);
+  const baseY = slot.y + (TREE_ROW_BASE_OFFSETS[row] ?? TREE_ROW_BASE_OFFSETS[1]);
 
   return {
     treeId,
