@@ -17,6 +17,7 @@ const SPLIT_PUSH_SPEED = 30;
 const BANK_SPLIT_ANIMATION_MS = 1000;
 const PRESENT_REVEAL_MS = 4000;
 const PRESENT_CONFETTI_PIECES = 30;
+const PURSE_PAY_DROP_MS = 850;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 const BANK_THEME_VALUES = new Set(["bank", "tree"]);
 const TREE_GRID_SLOTS = [
@@ -92,6 +93,8 @@ const dom = {
   bankTotal: document.querySelector("#bank-total"),
   bankInterestProgress: document.querySelector("#bank-interest-progress"),
   presentGrid: document.querySelector("#present-grid"),
+  purseRemaining: document.querySelector("#purse-remaining"),
+  purseCapacityDots: document.querySelector("#purse-capacity-dots"),
   purseCoins: document.querySelector("#purse-coins"),
   bankCoins: document.querySelector("#bank-coins"),
   bankZone: document.querySelector(".zone--bank"),
@@ -352,7 +355,9 @@ function createPurseCoin(timestamp) {
 
   const coin = createCoin("purse", timestamp);
   coin.expiresAt = timestamp + depreciationMs();
+  placeIncomingPurseCoin(coin);
   state.wageCoinsIssued += 1;
+  state.lastPurseDropAt = performance.now();
   return coin;
 }
 
@@ -479,6 +484,17 @@ function particleArea(location) {
     radius,
     width: Math.max(radius * 2 + 2, element.clientWidth || radius * 4),
     height: Math.max(radius * 2 + 2, element.clientHeight || radius * 4),
+  };
+}
+
+function placeIncomingPurseCoin(coin) {
+  const area = particleArea("purse");
+
+  coin.particle = {
+    x: randomBetween(area.radius, area.width - area.radius),
+    y: area.radius,
+    vx: randomBetween(-PARTICLE_MIN_SPEED, PARTICLE_MIN_SPEED),
+    vy: PARTICLE_MAX_SPEED,
   };
 }
 
@@ -760,6 +776,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     robotLastTick: timestamp,
     robotPauseBudgetMs: 0,
     lastParticleTick: null,
+    lastPurseDropAt: null,
     status: "playing",
     resultReason: null,
     message: "Feed the robot first, then invest coins so they can make more coins.",
@@ -787,6 +804,10 @@ function setMessage(message) {
 
 function bankCoinCount() {
   return state.coins.filter((coin) => coin.location === "bank").length;
+}
+
+function wageCoinsRemaining() {
+  return Math.max(0, state.settings.lifetime - state.wageCoinsIssued);
 }
 
 function endGame(status, reason) {
@@ -1380,6 +1401,32 @@ function renderPresents() {
   dom.presentGrid.replaceChildren(fragment);
 }
 
+function renderPurseCapacity() {
+  const fragment = document.createDocumentFragment();
+  const remaining = wageCoinsRemaining();
+  const now = performance.now();
+  const dropElapsed = state.lastPurseDropAt === null ? Infinity : now - state.lastPurseDropAt;
+  const recentlyDropped = dropElapsed < PURSE_PAY_DROP_MS;
+
+  dom.purseRemaining.textContent = remaining === 1 ? "$1 more" : `$${remaining} more`;
+
+  for (let count = 0; count < remaining; count += 1) {
+    const dot = document.createElement("span");
+    dot.className = "purse-pay-dot";
+    dot.style.setProperty("--dot-index", count);
+    fragment.append(dot);
+  }
+
+  if (recentlyDropped) {
+    const dropDot = document.createElement("span");
+    dropDot.className = "purse-pay-dot purse-pay-dot--drop";
+    dropDot.style.animationDelay = `${-dropElapsed}ms`;
+    fragment.append(dropDot);
+  }
+
+  dom.purseCapacityDots.replaceChildren(fragment);
+}
+
 function renderStats(timestamp) {
   const bankCoins = state.coins.filter((coin) => coin.location === "bank");
   let progress;
@@ -1481,6 +1528,7 @@ function renderResultOverlay() {
 
 function render(timestamp = performance.now()) {
   renderBankTheme();
+  renderPurseCapacity();
   renderStats(timestamp);
   renderStatus();
   renderPresents();
