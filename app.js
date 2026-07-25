@@ -755,6 +755,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     bankSplitCompletesAt: null,
     bankSplitRealStartedAt: null,
     bankSplitRealCompletesAt: null,
+    bankRevealPauseLastAt: null,
     robotStack: [],
     robotLastTick: timestamp,
     robotPauseBudgetMs: 0,
@@ -964,7 +965,77 @@ function completeSplit(coin, timestamp) {
   clearBankSplit(coin);
 }
 
+function shiftTreeBranchTiming(branchId, delta) {
+  const branch = state.treeBranches.find((item) => item.id === branchId);
+
+  if (!branch || branch.complete) {
+    return;
+  }
+
+  branch.startedAt += delta;
+  branch.completesAt += delta;
+}
+
+function shiftActiveBankSplitTiming(gameDelta, realDelta) {
+  if (state.bankSplitCompletesAt === null) {
+    return;
+  }
+
+  const usesRealSplitTime = state.settings.staticMode && state.bankSplitRealStartedAt !== null;
+  const splitDelta = usesRealSplitTime ? realDelta : gameDelta;
+
+  state.bankSplitStartedAt += gameDelta;
+  state.bankSplitCompletesAt += gameDelta;
+
+  if (usesRealSplitTime) {
+    state.bankSplitRealStartedAt += realDelta;
+    state.bankSplitRealCompletesAt += realDelta;
+  }
+
+  for (const coin of state.coins) {
+    if (coin.location !== "bank" || !hasActiveBankSplit(coin)) {
+      continue;
+    }
+
+    coin.splitStartedAt += splitDelta;
+    coin.splitCompletesAt += splitDelta;
+
+    if (coin.treeSproutChildren) {
+      for (const childNode of coin.treeSproutChildren) {
+        shiftTreeBranchTiming(childNode.treeBranchId, splitDelta);
+      }
+    }
+  }
+}
+
+function pauseBankForPresentReveal(timestamp, realTimestamp) {
+  if (state.bankRevealPauseLastAt === null) {
+    state.bankRevealPauseLastAt = {
+      game: timestamp,
+      real: realTimestamp,
+    };
+    return;
+  }
+
+  const gameDelta = Math.max(0, timestamp - state.bankRevealPauseLastAt.game);
+  const realDelta = Math.max(0, realTimestamp - state.bankRevealPauseLastAt.real);
+
+  state.bankRevealPauseLastAt = {
+    game: timestamp,
+    real: realTimestamp,
+  };
+
+  shiftActiveBankSplitTiming(gameDelta, realDelta);
+}
+
 function processBank(timestamp, realTimestamp = timestamp) {
+  if (hasActivePresentReveal(realTimestamp)) {
+    pauseBankForPresentReveal(timestamp, realTimestamp);
+    return;
+  }
+
+  state.bankRevealPauseLastAt = null;
+
   if (state.bankSplitCompletesAt !== null) {
     const splitComplete = state.settings.staticMode
       ? realTimestamp >= state.bankSplitRealCompletesAt
