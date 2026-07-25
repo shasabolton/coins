@@ -23,6 +23,7 @@ const PURSE_DROP_SETTLE_SPEED = 55;
 const PURSE_DROP_MAX_MS = 7000;
 const CHA_CHING_SRC = "cha-ching.mp3";
 const CHA_CHING_FALLBACK_MS = 1600;
+const CHA_CHING_STAGGER_MS = 300;
 const COIN_DROP_SRC = "coin-drop.mp3";
 const COIN_DROP_START_SEC = 0.7;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
@@ -623,6 +624,21 @@ function playCoinDrop() {
 
   audio.addEventListener("loadedmetadata", startPlayback, { once: true });
   audio.load();
+}
+
+function playChaChingSound() {
+  const template = ensureChaChingAudio();
+  const audio = template.cloneNode();
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
+function playChaChingStagger(count) {
+  const plays = Math.max(0, Math.floor(count));
+
+  for (let index = 0; index < plays; index += 1) {
+    window.setTimeout(() => playChaChingSound(), index * CHA_CHING_STAGGER_MS);
+  }
 }
 
 function playChaChing(onDropCue) {
@@ -1442,6 +1458,14 @@ function processBank(timestamp, realTimestamp = timestamp) {
       return;
     }
 
+    const grownCount = splittingCoins.reduce((sum, coin) => {
+      if (coin.treeSproutChildren) {
+        return sum + coin.treeSproutChildren.length;
+      }
+
+      return sum + 1;
+    }, 0);
+
     for (const coin of splittingCoins) {
       completeSplit(coin, timestamp);
     }
@@ -1454,6 +1478,7 @@ function processBank(timestamp, realTimestamp = timestamp) {
     state.bankNextSplitAt = timestamp + interestMs();
 
     if (splittingCoins.length > 0) {
+      playChaChingStagger(grownCount);
       setMessage(`${splittingCoins.length} bank coin${splittingCoins.length === 1 ? "" : "s"} finished splitting.`);
     }
 
