@@ -2480,13 +2480,14 @@ function layoutBankBricks() {
     return;
   }
 
-  bankBrickLayoutKey = layoutKey;
-
   if (width < 8 || height < 8) {
+    bankBrickLayoutKey = "";
     bankBrickMetrics = null;
     dom.bankBricks.replaceChildren();
     return;
   }
+
+  bankBrickLayoutKey = layoutKey;
 
   const brickHeight = Math.max(8, Math.min(12, Math.round(height / 28)));
   const brickWidth = Math.round(brickHeight * 2.1);
@@ -3183,9 +3184,40 @@ dom.inputs.start.addEventListener("input", () => dom.inputs.start.setCustomValid
 dom.inputs.feedrate.addEventListener("input", () => dom.inputs.start.setCustomValidity(""));
 dom.inputs.staticMode.addEventListener("input", () => updateStaticPayrateInput(true));
 
+function resumeLayout() {
+  bankBrickLayoutKey = "";
+  if (!state) {
+    return;
+  }
+
+  render();
+}
+
 window.addEventListener("pointerdown", unlockAudio, { passive: true });
 window.addEventListener("keydown", unlockAudio);
-window.addEventListener("resize", layoutBankBricks);
+window.addEventListener("resize", () => {
+  bankBrickLayoutKey = "";
+  layoutBankBricks();
+});
+window.visualViewport?.addEventListener("resize", () => {
+  bankBrickLayoutKey = "";
+  layoutBankBricks();
+});
+window.addEventListener("pageshow", resumeLayout);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    resumeLayout();
+  }
+});
+document.addEventListener(
+  "touchmove",
+  (event) => {
+    if (drag) {
+      event.preventDefault();
+    }
+  },
+  { passive: false },
+);
 
 fillSettingsForm(DEFAULT_SETTINGS);
 newGame(DEFAULT_SETTINGS);

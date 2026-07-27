@@ -26,7 +26,6 @@
 html,
 body {
   height: 100%;
-  overflow: hidden;
 }
 
 body {
@@ -34,10 +33,13 @@ body {
   margin: 0;
   display: grid;
   place-items: center;
+  overflow-x: hidden;
+  overscroll-behavior-y: auto;
   background:
     radial-gradient(circle at top left, rgba(247, 183, 51, 0.25), transparent 28rem),
     linear-gradient(145deg, #f8efe0, #ead8bb);
   color: var(--ink);
+  touch-action: manipulation;
 }
 
 button,
