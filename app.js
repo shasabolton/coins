@@ -24,8 +24,20 @@ const PURSE_DROP_MAX_MS = 7000;
 const CHA_CHING_SRC = "cha-ching.mp3";
 const CHA_CHING_FALLBACK_MS = 1600;
 const CHA_CHING_STAGGER_MS = 300;
+const BANK_CHACHING_TAIL_MS = 2000;
 const COIN_DROP_SRC = "coin-drop.mp3";
 const COIN_DROP_START_SEC = 0.7;
+const COIN_TINK_SRC = "coin tink.mp3";
+const COIN_TINK_START_FALLBACK_SEC = 1.46;
+const COIN_TINK_PEAK_RATIO = 0.25;
+const STRETCH_SRC = "stretch.mp3";
+const POP_SRC = "pop.mp3";
+const POP_START_FALLBACK_SEC = 0.02;
+const DRUMROLL_SRC = "drumroll.mp3";
+const DRUMROLL_CRASH_SEC = 3.41;
+const PRESENT_EXPLODE_PROGRESS = 0.48;
+const DRUMROLL_FADE_IN_MS = 450;
+const MITOSIS_SEPARATE_PROGRESS = 0.78;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 const BANK_THEME_VALUES = new Set(["bank", "tree"]);
 const TREE_GRID_SLOTS = [
@@ -97,16 +109,19 @@ const EMOJIS = [
 ];
 
 const dom = {
-  gameState: document.querySelector("#game-state"),
   bankTotal: document.querySelector("#bank-total"),
   bankInterestProgress: document.querySelector("#bank-interest-progress"),
   presentGrid: document.querySelector("#present-grid"),
   purseReserve: document.querySelector("#purse-reserve"),
   purseCoins: document.querySelector("#purse-coins"),
   bankCoins: document.querySelector("#bank-coins"),
+  bankBricks: document.querySelector("#bank-bricks"),
   bankZone: document.querySelector(".zone--bank"),
+  bankWall: document.querySelector(".bank-wall"),
   robot: document.querySelector(".robot"),
   robotStack: document.querySelector("#robot-stack"),
+  startOverlay: document.querySelector("#start-overlay"),
+  startPlayButton: document.querySelector("#start-play-button"),
   resultOverlay: document.querySelector("#result-overlay"),
   resultCard: document.querySelector(".result-card"),
   resultKicker: document.querySelector("#result-kicker"),
@@ -114,7 +129,6 @@ const dom = {
   resultMessage: document.querySelector("#result-message"),
   resultDetail: document.querySelector("#result-detail"),
   resultNewGameButton: document.querySelector("#result-new-game-button"),
-  messagePanel: document.querySelector("#message-panel"),
   appMenu: document.querySelector(".app-menu"),
   newGameButton: document.querySelector("#new-game-button"),
   settingsButton: document.querySelector("#settings-button"),
@@ -551,6 +565,17 @@ function purseDropSquash(coin, now = performance.now()) {
 
 let chaChingAudio = null;
 let coinDropAudio = null;
+let coinTinkAudio = null;
+let stretchAudio = null;
+let popAudio = null;
+let drumrollAudio = null;
+let mitosisStretchInstance = null;
+let presentDrumrollInstance = null;
+let presentDrumrollFadeRaf = null;
+let coinTinkStartSec = COIN_TINK_START_FALLBACK_SEC;
+let coinTinkStartResolved = false;
+let popStartSec = POP_START_FALLBACK_SEC;
+let popStartResolved = false;
 
 function ensureChaChingAudio() {
   if (!chaChingAudio) {
@@ -570,8 +595,140 @@ function ensureCoinDropAudio() {
   return coinDropAudio;
 }
 
+function ensureCoinTinkAudio() {
+  if (!coinTinkAudio) {
+    coinTinkAudio = new Audio(COIN_TINK_SRC);
+    coinTinkAudio.preload = "auto";
+    resolveCoinTinkStartSec();
+  }
+
+  return coinTinkAudio;
+}
+
+function ensureStretchAudio() {
+  if (!stretchAudio) {
+    stretchAudio = new Audio(STRETCH_SRC);
+    stretchAudio.preload = "auto";
+  }
+
+  return stretchAudio;
+}
+
+function ensurePopAudio() {
+  if (!popAudio) {
+    popAudio = new Audio(POP_SRC);
+    popAudio.preload = "auto";
+    resolvePopStartSec();
+  }
+
+  return popAudio;
+}
+
+function ensureDrumrollAudio() {
+  if (!drumrollAudio) {
+    drumrollAudio = new Audio(DRUMROLL_SRC);
+    drumrollAudio.preload = "auto";
+  }
+
+  return drumrollAudio;
+}
+
+function drumrollStartSec() {
+  const leadInSec = (PRESENT_REVEAL_MS * PRESENT_EXPLODE_PROGRESS) / 1000;
+  return Math.max(0, DRUMROLL_CRASH_SEC - leadInSec);
+}
+
+function resolveAudioStartSec(src, onResolved, options = {}) {
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContextClass) {
+    onResolved(null);
+    return;
+  }
+
+  const ctx = new AudioContextClass();
+  const absoluteThreshold = options.threshold ?? 0.02;
+  const peakRatio = options.peakRatio ?? null;
+
+  fetch(src)
+    .then((response) => response.arrayBuffer())
+    .then((data) => ctx.decodeAudioData(data))
+    .then((buffer) => {
+      const samples = buffer.getChannelData(0);
+      let threshold = absoluteThreshold;
+
+      if (peakRatio !== null) {
+        let peak = 0;
+
+        for (let index = 0; index < samples.length; index += 1) {
+          peak = Math.max(peak, Math.abs(samples[index]));
+        }
+
+        threshold = Math.max(absoluteThreshold, peak * peakRatio);
+      }
+
+      let startIndex = 0;
+
+      for (let index = 0; index < samples.length; index += 1) {
+        if (Math.abs(samples[index]) >= threshold) {
+          startIndex = index;
+          break;
+        }
+      }
+
+      onResolved(Math.max(0, startIndex / buffer.sampleRate - 0.008));
+      return ctx.close();
+    })
+    .catch(() => {
+      onResolved(null);
+
+      if (typeof ctx.close === "function") {
+        ctx.close();
+      }
+    });
+}
+
+function resolveCoinTinkStartSec() {
+  if (coinTinkStartResolved) {
+    return;
+  }
+
+  resolveAudioStartSec(
+    COIN_TINK_SRC,
+    (startSec) => {
+      if (startSec !== null) {
+        coinTinkStartSec = startSec;
+      }
+
+      coinTinkStartResolved = true;
+    },
+    { peakRatio: COIN_TINK_PEAK_RATIO },
+  );
+}
+
+function resolvePopStartSec() {
+  if (popStartResolved) {
+    return;
+  }
+
+  resolveAudioStartSec(POP_SRC, (startSec) => {
+    if (startSec !== null) {
+      popStartSec = startSec;
+    }
+
+    popStartResolved = true;
+  });
+}
+
 function unlockAudio() {
-  const sounds = [ensureChaChingAudio(), ensureCoinDropAudio()];
+  const sounds = [
+    ensureChaChingAudio(),
+    ensureCoinDropAudio(),
+    ensureCoinTinkAudio(),
+    ensureStretchAudio(),
+    ensurePopAudio(),
+    ensureDrumrollAudio(),
+  ];
 
   for (const audio of sounds) {
     if (!audio.paused && !audio.ended) {
@@ -599,12 +756,263 @@ function unlockAudio() {
   }
 }
 
+function stopPresentDrumroll() {
+  if (presentDrumrollFadeRaf !== null) {
+    cancelAnimationFrame(presentDrumrollFadeRaf);
+    presentDrumrollFadeRaf = null;
+  }
+
+  if (!presentDrumrollInstance) {
+    return;
+  }
+
+  presentDrumrollInstance.pause();
+  presentDrumrollInstance.currentTime = 0;
+  presentDrumrollInstance = null;
+}
+
+function fadeInPresentDrumroll(audio, durationMs) {
+  if (presentDrumrollFadeRaf !== null) {
+    cancelAnimationFrame(presentDrumrollFadeRaf);
+    presentDrumrollFadeRaf = null;
+  }
+
+  audio.volume = 0;
+  const startedAt = performance.now();
+
+  const tickFade = (now) => {
+    if (presentDrumrollInstance !== audio) {
+      presentDrumrollFadeRaf = null;
+      return;
+    }
+
+    const progress = clamp((now - startedAt) / Math.max(1, durationMs), 0, 1);
+    audio.volume = progress * progress;
+
+    if (progress < 1) {
+      presentDrumrollFadeRaf = requestAnimationFrame(tickFade);
+      return;
+    }
+
+    audio.volume = 1;
+    presentDrumrollFadeRaf = null;
+  };
+
+  presentDrumrollFadeRaf = requestAnimationFrame(tickFade);
+}
+
+function playPresentDrumroll() {
+  stopPresentDrumroll();
+
+  const template = ensureDrumrollAudio();
+  const audio = template.cloneNode();
+  const startAt = Math.min(
+    drumrollStartSec(),
+    Number.isFinite(template.duration) && template.duration > 0
+      ? Math.max(0, template.duration - 0.05)
+      : drumrollStartSec(),
+  );
+
+  presentDrumrollInstance = audio;
+  audio.volume = 0;
+
+  const startPlayback = () => {
+    if (presentDrumrollInstance !== audio) {
+      return;
+    }
+
+    try {
+      audio.currentTime = startAt;
+    } catch {
+      audio.currentTime = 0;
+    }
+
+    const playPromise = audio.play();
+
+    if (!playPromise) {
+      fadeInPresentDrumroll(audio, DRUMROLL_FADE_IN_MS);
+      return;
+    }
+
+    playPromise
+      .then(() => {
+        if (presentDrumrollInstance === audio) {
+          fadeInPresentDrumroll(audio, DRUMROLL_FADE_IN_MS);
+        }
+      })
+      .catch(() => {
+        if (presentDrumrollInstance === audio) {
+          presentDrumrollInstance = null;
+        }
+      });
+  };
+
+  audio.addEventListener(
+    "ended",
+    () => {
+      if (presentDrumrollInstance === audio) {
+        presentDrumrollInstance = null;
+      }
+    },
+    { once: true },
+  );
+
+  if (audio.readyState >= 1) {
+    startPlayback();
+    return;
+  }
+
+  audio.addEventListener("loadedmetadata", startPlayback, { once: true });
+  audio.load();
+}
+
+function stopBankMitosisStretch() {
+  if (!mitosisStretchInstance) {
+    return;
+  }
+
+  mitosisStretchInstance.pause();
+  mitosisStretchInstance.currentTime = 0;
+  mitosisStretchInstance = null;
+}
+
+function startBankMitosisStretch() {
+  stopBankMitosisStretch();
+  const template = ensureStretchAudio();
+  mitosisStretchInstance = template.cloneNode();
+  mitosisStretchInstance.loop = true;
+  mitosisStretchInstance.currentTime = 0;
+  mitosisStretchInstance.play().catch(() => {});
+}
+
+function pauseBankMitosisStretch() {
+  if (mitosisStretchInstance && !mitosisStretchInstance.paused) {
+    mitosisStretchInstance.pause();
+  }
+}
+
+function resumeBankMitosisStretch() {
+  if (
+    !mitosisStretchInstance ||
+    !state?.bankSplitCompletesAt ||
+    state.bankMitosisSeparated ||
+    !mitosisStretchInstance.paused
+  ) {
+    return;
+  }
+
+  mitosisStretchInstance.play().catch(() => {});
+}
+
+function playBankMitosisPop() {
+  const template = ensurePopAudio();
+  const audio = template.cloneNode();
+  const startAt = Math.min(
+    popStartSec,
+    Number.isFinite(template.duration) && template.duration > 0 ? Math.max(0, template.duration - 0.05) : popStartSec,
+  );
+
+  const startPlayback = () => {
+    try {
+      audio.currentTime = startAt;
+    } catch {
+      audio.currentTime = 0;
+    }
+
+    audio.play().catch(() => {});
+  };
+
+  if (audio.readyState >= 1) {
+    startPlayback();
+    return;
+  }
+
+  audio.addEventListener("loadedmetadata", startPlayback, { once: true });
+  audio.load();
+}
+
+function countGrowingBankCoins(coins) {
+  return coins.reduce((sum, coin) => {
+    if (coin.treeSproutChildren) {
+      return sum + coin.treeSproutChildren.length;
+    }
+
+    return sum + 1;
+  }, 0);
+}
+
+function bankSplitProgress(timestamp, realTimestamp = timestamp) {
+  if (state.bankSplitCompletesAt === null || state.bankSplitStartedAt === null) {
+    return 0;
+  }
+
+  if (state.settings.staticMode && state.bankSplitRealStartedAt !== null && state.bankSplitRealCompletesAt !== null) {
+    return clamp(
+      (realTimestamp - state.bankSplitRealStartedAt) / (state.bankSplitRealCompletesAt - state.bankSplitRealStartedAt),
+      0,
+      1,
+    );
+  }
+
+  return clamp((timestamp - state.bankSplitStartedAt) / (state.bankSplitCompletesAt - state.bankSplitStartedAt), 0, 1);
+}
+
+function triggerBankMitosisSeparation() {
+  if (state.bankMitosisSeparated) {
+    return;
+  }
+
+  state.bankMitosisSeparated = true;
+  stopBankMitosisStretch();
+  playBankMitosisPop();
+  playChaChingStagger(state.bankMitosisGrownCount);
+}
+
+function updateBankMitosisAudio(timestamp, realTimestamp) {
+  if (state.bankSplitCompletesAt === null || state.bankMitosisSeparated) {
+    return;
+  }
+
+  if (bankSplitProgress(timestamp, realTimestamp) >= MITOSIS_SEPARATE_PROGRESS) {
+    triggerBankMitosisSeparation();
+  }
+}
+
 function playCoinDrop() {
   const template = ensureCoinDropAudio();
   const audio = template.cloneNode();
   const startAt = Math.min(
     COIN_DROP_START_SEC,
     Number.isFinite(template.duration) && template.duration > 0 ? Math.max(0, template.duration - 0.05) : COIN_DROP_START_SEC,
+  );
+
+  const startPlayback = () => {
+    try {
+      audio.currentTime = startAt;
+    } catch {
+      audio.currentTime = 0;
+    }
+
+    audio.play().catch(() => {});
+  };
+
+  if (audio.readyState >= 1) {
+    startPlayback();
+    return;
+  }
+
+  audio.addEventListener("loadedmetadata", startPlayback, { once: true });
+  audio.load();
+}
+
+function playCoinTink() {
+  const template = ensureCoinTinkAudio();
+  const audio = template.cloneNode();
+  const startAt = Math.min(
+    coinTinkStartSec,
+    Number.isFinite(template.duration) && template.duration > 0
+      ? Math.max(0, template.duration - 0.05)
+      : coinTinkStartSec,
   );
 
   const startPlayback = () => {
@@ -638,6 +1046,11 @@ function playChaChingStagger(count) {
 
   for (let index = 0; index < plays; index += 1) {
     window.setTimeout(() => playChaChingSound(), index * CHA_CHING_STAGGER_MS);
+  }
+
+  if (plays > 0 && state) {
+    const lastStartAt = performance.now() + (plays - 1) * CHA_CHING_STAGGER_MS;
+    state.bankChaChingBlocksUntil = lastStartAt + BANK_CHACHING_TAIL_MS;
   }
 }
 
@@ -804,12 +1217,22 @@ function robotCoinScale(coin) {
 function particleArea(location) {
   const element = location === "bank" ? dom.bankCoins : dom.purseCoins;
   const radius = particleRadius(location);
+  const width = Math.max(radius * 2 + 2, element.clientWidth || radius * 4);
+  const height = Math.max(radius * 2 + 2, element.clientHeight || radius * 4);
+  const inset =
+    location === "bank" && !isTreeBankTheme() && bankBrickMetrics
+      ? bankBrickMetrics
+      : { left: 0, right: 0, top: 0, bottom: 0 };
 
   return {
     element,
     radius,
-    width: Math.max(radius * 2 + 2, element.clientWidth || radius * 4),
-    height: Math.max(radius * 2 + 2, element.clientHeight || radius * 4),
+    width,
+    height,
+    minX: inset.left + radius,
+    maxX: Math.max(inset.left + radius, width - inset.right - radius),
+    minY: inset.top + radius,
+    maxY: Math.max(inset.top + radius, height - inset.bottom - radius),
   };
 }
 
@@ -818,8 +1241,8 @@ function ensureParticle(coin, location) {
 
   if (!coin.particle) {
     coin.particle = {
-      x: randomBetween(area.radius, area.width - area.radius),
-      y: randomBetween(area.radius, area.height - area.radius),
+      x: randomBetween(area.minX, area.maxX),
+      y: randomBetween(area.minY, area.maxY),
       ...randomVelocity(),
     };
   }
@@ -829,10 +1252,10 @@ function ensureParticle(coin, location) {
 }
 
 function keepParticleInBounds(particle, area) {
-  const minX = area.radius;
-  const maxX = area.width - area.radius;
-  const minY = area.radius;
-  const maxY = area.height - area.radius;
+  const minX = area.minX ?? area.radius;
+  const maxX = area.maxX ?? area.width - area.radius;
+  const minY = area.minY ?? area.radius;
+  const maxY = area.maxY ?? area.height - area.radius;
 
   if (particle.x < minX) {
     particle.x = minX;
@@ -1062,6 +1485,7 @@ function grantStaticStep() {
 }
 
 function clearPresentReveals() {
+  stopPresentDrumroll();
   document.querySelectorAll(".present-reveal").forEach((element) => element.remove());
 }
 
@@ -1094,13 +1518,16 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     bankSplitRealStartedAt: null,
     bankSplitRealCompletesAt: null,
     bankRevealPauseLastAt: null,
+    bankMitosisSeparated: false,
+    bankMitosisGrownCount: 0,
+    bankChaChingBlocksUntil: null,
     purseAnimationPauseLastAt: null,
     pendingPurseDrop: null,
     robotStack: [],
     robotLastTick: timestamp,
     robotPauseBudgetMs: 0,
     lastParticleTick: null,
-    status: "playing",
+    status: "ready",
     resultReason: null,
     message: "Feed the robot first, then invest coins so they can make more coins.",
     presents: Array.from({ length: settings.presents }, (_, index) => ({
@@ -1112,12 +1539,33 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
   };
 
   clearPresentReveals();
+  stopBankMitosisStretch();
 
   for (let count = 0; count < settings.start; count += 1) {
     createRobotCoin(timestamp);
   }
 
   renderPurseReserve();
+  render(timestamp);
+}
+
+function beginPlay() {
+  if (!state || state.status !== "ready") {
+    return;
+  }
+
+  const timestamp = performance.now();
+
+  state.status = "playing";
+  state.gameTime = timestamp;
+  state.lastClockTick = null;
+  state.robotLastTick = timestamp;
+  state.nextPayAt = timestamp + payrateMs();
+  state.bankCycleStartedAt = timestamp;
+  state.bankNextSplitAt = timestamp + interestMs();
+  state.lastParticleTick = null;
+
+  unlockAudio();
   queuePurseCoinDrop(timestamp);
   render(timestamp);
 }
@@ -1437,13 +1885,17 @@ function pauseBankForPresentReveal(timestamp, realTimestamp) {
 
 function processBank(timestamp, realTimestamp = timestamp) {
   if (hasActivePresentReveal(realTimestamp)) {
+    pauseBankMitosisStretch();
     pauseBankForPresentReveal(timestamp, realTimestamp);
     return;
   }
 
   state.bankRevealPauseLastAt = null;
+  resumeBankMitosisStretch();
 
   if (state.bankSplitCompletesAt !== null) {
+    updateBankMitosisAudio(timestamp, realTimestamp);
+
     const splitComplete = state.settings.staticMode
       ? realTimestamp >= state.bankSplitRealCompletesAt
       : timestamp >= state.bankSplitCompletesAt;
@@ -1458,13 +1910,10 @@ function processBank(timestamp, realTimestamp = timestamp) {
       return;
     }
 
-    const grownCount = splittingCoins.reduce((sum, coin) => {
-      if (coin.treeSproutChildren) {
-        return sum + coin.treeSproutChildren.length;
-      }
-
-      return sum + 1;
-    }, 0);
+    if (!state.bankMitosisSeparated) {
+      state.bankMitosisGrownCount = countGrowingBankCoins(splittingCoins);
+      triggerBankMitosisSeparation();
+    }
 
     for (const coin of splittingCoins) {
       completeSplit(coin, timestamp);
@@ -1474,11 +1923,12 @@ function processBank(timestamp, realTimestamp = timestamp) {
     state.bankSplitCompletesAt = null;
     state.bankSplitRealStartedAt = null;
     state.bankSplitRealCompletesAt = null;
+    state.bankMitosisSeparated = false;
+    state.bankMitosisGrownCount = 0;
     state.bankCycleStartedAt = timestamp;
     state.bankNextSplitAt = timestamp + interestMs();
 
     if (splittingCoins.length > 0) {
-      playChaChingStagger(grownCount);
       setMessage(`${splittingCoins.length} bank coin${splittingCoins.length === 1 ? "" : "s"} finished splitting.`);
     }
 
@@ -1501,16 +1951,24 @@ function processBank(timestamp, realTimestamp = timestamp) {
   state.bankSplitCompletesAt = timestamp + BANK_SPLIT_ANIMATION_MS;
   state.bankSplitRealStartedAt = state.settings.staticMode ? realTimestamp : null;
   state.bankSplitRealCompletesAt = state.settings.staticMode ? realTimestamp + BANK_SPLIT_ANIMATION_MS : null;
+  state.bankMitosisSeparated = false;
 
   for (const coin of coinsToSplit) {
     beginSplit(coin, state.settings.staticMode ? realTimestamp : timestamp);
   }
 
+  state.bankMitosisGrownCount = countGrowingBankCoins(
+    state.coins.filter((coin) => coin.location === "bank" && hasActiveBankSplit(coin)),
+  );
+  startBankMitosisStretch();
   setMessage(`${coinsToSplit.length} bank coin${coinsToSplit.length === 1 ? " is" : "s are"} splitting.`);
 }
 
-function hasActiveBankAnimation() {
-  return state.bankSplitCompletesAt !== null;
+function hasActiveBankAnimation(realTimestamp = performance.now()) {
+  return (
+    state.bankSplitCompletesAt !== null ||
+    (state.bankChaChingBlocksUntil !== null && realTimestamp < state.bankChaChingBlocksUntil)
+  );
 }
 
 function checkWinOrLoss() {
@@ -1895,30 +2353,97 @@ function renderStats(timestamp) {
   dom.bankInterestProgress.style.setProperty("--progress", progress.toFixed(3));
 }
 
+let bankBrickLayoutKey = "";
+let bankBrickMetrics = null;
+
+function createBrickElement(x, y, width, height) {
+  const brick = document.createElement("div");
+  brick.className = "brick";
+  brick.style.left = `${x}px`;
+  brick.style.top = `${y}px`;
+  brick.style.width = `${width}px`;
+  brick.style.height = `${height}px`;
+  return brick;
+}
+
+function layoutBankBricks() {
+  if (!dom.bankBricks || !dom.bankWall) {
+    return;
+  }
+
+  if (isTreeBankTheme()) {
+    if (bankBrickLayoutKey !== "tree") {
+      bankBrickLayoutKey = "tree";
+      bankBrickMetrics = null;
+      dom.bankBricks.replaceChildren();
+    }
+    return;
+  }
+
+  const width = dom.bankWall.clientWidth;
+  const height = dom.bankWall.clientHeight;
+  const layoutKey = `${width}x${height}`;
+
+  if (layoutKey === bankBrickLayoutKey) {
+    return;
+  }
+
+  bankBrickLayoutKey = layoutKey;
+
+  if (width < 8 || height < 8) {
+    bankBrickMetrics = null;
+    dom.bankBricks.replaceChildren();
+    return;
+  }
+
+  const brickHeight = Math.max(8, Math.min(12, Math.round(height / 28)));
+  const brickWidth = Math.round(brickHeight * 2.1);
+  const gap = 2;
+  const stepX = brickWidth + gap;
+  const stepY = brickHeight + gap;
+  const fragment = document.createDocumentFragment();
+
+  bankBrickMetrics = {
+    left: brickWidth,
+    right: brickWidth,
+    top: brickHeight,
+    bottom: brickHeight,
+  };
+
+  const across = Math.max(1, Math.floor((width + gap) / stepX));
+  const usedWidth = across * brickWidth + (across - 1) * gap;
+  const offsetX = Math.max(0, (width - usedWidth) / 2);
+
+  for (let i = 0; i < across; i += 1) {
+    const x = offsetX + i * stepX;
+    fragment.append(createBrickElement(x, 0, brickWidth, brickHeight));
+    fragment.append(createBrickElement(x, height - brickHeight, brickWidth, brickHeight));
+  }
+
+  const down = Math.max(0, Math.floor((height - 2 * stepY + gap) / stepY));
+  const usedHeight = down * brickHeight + Math.max(0, down - 1) * gap;
+  const offsetY = stepY + Math.max(0, (height - 2 * stepY - usedHeight) / 2);
+
+  for (let i = 0; i < down; i += 1) {
+    const y = offsetY + i * stepY;
+    fragment.append(createBrickElement(0, y, brickWidth, brickHeight));
+    fragment.append(createBrickElement(width - brickWidth, y, brickWidth, brickHeight));
+  }
+
+  dom.bankBricks.replaceChildren(fragment);
+}
+
 function renderBankTheme() {
   const isTree = isTreeBankTheme();
 
   dom.bankZone.classList.toggle("is-theme-tree", isTree);
   dom.bankCoins.classList.toggle("coin-tray--tree", isTree);
+  layoutBankBricks();
 }
 
-function renderStatus() {
-  dom.gameState.classList.toggle("is-over", state.status === "lost");
-  dom.gameState.classList.toggle("is-won", state.status === "won");
-  dom.messagePanel.classList.toggle("is-over", state.status === "lost");
-  dom.messagePanel.classList.toggle("is-won", state.status === "won");
-
-  if (state.status === "won") {
-    dom.gameState.textContent = "Won";
-  } else if (state.status === "lost") {
-    dom.gameState.textContent = "Game over";
-  } else if (state.settings.staticMode && state.staticBudgetMs <= 0) {
-    dom.gameState.textContent = "Static pause";
-  } else {
-    dom.gameState.textContent = "Playing";
-  }
-
-  dom.messagePanel.textContent = state.message;
+function renderStartOverlay() {
+  const showStart = state.status === "ready";
+  dom.startOverlay.hidden = !showStart;
 }
 
 function resultMessageForState() {
@@ -1958,10 +2483,10 @@ function hasActivePresentReveal(timestamp = performance.now()) {
 }
 
 function renderResultOverlay() {
-  if (state.status === "playing" || hasActivePresentReveal()) {
+  if (state.status === "playing" || state.status === "ready" || hasActivePresentReveal()) {
     dom.resultOverlay.hidden = true;
 
-    if (state.status === "playing") {
+    if (state.status === "playing" || state.status === "ready") {
       dom.resultCard.classList.remove("is-lost", "is-won");
     }
 
@@ -1982,11 +2507,11 @@ function renderResultOverlay() {
 function render(timestamp = performance.now()) {
   renderBankTheme();
   renderStats(timestamp);
-  renderStatus();
   renderPresents();
   renderRobotSizing();
   renderPurseReserve();
   renderCoins(timestamp);
+  renderStartOverlay();
   renderResultOverlay();
 }
 
@@ -2191,6 +2716,7 @@ function feedRobot(coin) {
   coin.particle = null;
   coin.remainingMs = depreciationMs();
   state.robotStack.push(coin.id);
+  playCoinTink();
   setMessage("The robot ate a coin and stacked it in his tummy.");
   return true;
 }
@@ -2379,6 +2905,7 @@ function openPresent(coin, presentIndex, sourceElement) {
   }
 
   playPresentReveal(present, sourceElement);
+  playPresentDrumroll();
   setMessage(`The present opened and revealed ${present.emoji}.`);
   checkWinOrLoss();
   return true;
@@ -2480,6 +3007,10 @@ document.addEventListener("pointerdown", (event) => {
   startDrag(event, coin);
 });
 
+dom.startPlayButton.addEventListener("click", () => {
+  beginPlay();
+});
+
 dom.newGameButton.addEventListener("click", () => {
   dom.appMenu.open = false;
   newGame(state.settings);
@@ -2539,6 +3070,7 @@ dom.inputs.staticMode.addEventListener("input", () => updateStaticPayrateInput(t
 
 window.addEventListener("pointerdown", unlockAudio, { passive: true });
 window.addEventListener("keydown", unlockAudio);
+window.addEventListener("resize", layoutBankBricks);
 
 fillSettingsForm(DEFAULT_SETTINGS);
 newGame(DEFAULT_SETTINGS);

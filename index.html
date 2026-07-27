@@ -3,17 +3,15 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Coins Investing Game</title>
+    <title>Shrewd Robot</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <main class="phone" aria-labelledby="game-title">
       <section class="scoreboard" aria-live="polite">
         <div class="title-block">
-          <p class="eyebrow">Investing game</p>
-          <h1 id="game-title">Coins</h1>
+          <h1 id="game-title">Shrewd Robot</h1>
         </div>
-        <div class="status-pill" id="game-state">Playing</div>
         <details class="app-menu">
           <summary aria-label="Open game menu">...</summary>
           <div class="menu-panel">
@@ -35,15 +33,18 @@
 
         <section class="zone zone--bank" data-drop="bank" aria-label="Savings bank">
           <div class="bank-summary">
-            <div class="bank-summary__row">
-              <span>Total dollars in savings</span>
+            <div class="bank-summary__label">
               <strong id="bank-total">$0</strong>
+              <span>BANK</span>
             </div>
             <div class="interest-progress" aria-label="Interest progress">
               <span id="bank-interest-progress"></span>
             </div>
           </div>
-          <div class="coin-tray coin-tray--bank coin-tray--particles" id="bank-coins"></div>
+          <div class="bank-wall">
+            <div class="bank-bricks" id="bank-bricks" aria-hidden="true"></div>
+            <div class="coin-tray coin-tray--bank coin-tray--particles" id="bank-coins"></div>
+          </div>
         </section>
 
         <section class="zone zone--robot" data-drop="robot" aria-label="Robot">
@@ -56,11 +57,14 @@
           </div>
         </section>
       </section>
-
-      <section class="message-panel" id="message-panel" aria-live="assertive">
-        Feed the robot first, then invest coins so they can make more coins.
-      </section>
     </main>
+
+    <section class="start-overlay" id="start-overlay" aria-labelledby="start-goal">
+      <div class="start-card">
+        <p class="start-goal" id="start-goal">Goal: Open all the presents, feed the robot</p>
+        <button class="result-button" id="start-play-button" type="button">Play</button>
+      </div>
+    </section>
 
     <section class="result-overlay" id="result-overlay" aria-live="assertive" hidden>
       <div class="result-card">
