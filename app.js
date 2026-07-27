@@ -37,6 +37,10 @@ const DRUMROLL_SRC = "drumroll.mp3";
 const DRUMROLL_CRASH_SEC = 3.41;
 const PRESENT_EXPLODE_PROGRESS = 0.48;
 const DRUMROLL_FADE_IN_MS = 450;
+const SAD_TRUMPET_SRC = "universfield-sad-trumpet-278822.mp3";
+const SAD_TRUMPET_START_SEC = 0.15;
+const VICTORY_TRUMPET_SRC = "astralsynthesizer-11l-victory_trumpet-1749704501065-358769.mp3";
+const VICTORY_TRUMPET_START_SEC = 0.05;
 const MITOSIS_SEPARATE_PROGRESS = 0.78;
 const INTEGER_SETTING_KEYS = new Set(["payrate", "feedrate", "start", "presents", "lifetime"]);
 const BANK_THEME_VALUES = new Set(["bank", "tree"]);
@@ -569,9 +573,12 @@ let coinTinkAudio = null;
 let stretchAudio = null;
 let popAudio = null;
 let drumrollAudio = null;
+let sadTrumpetAudio = null;
+let victoryTrumpetAudio = null;
 let mitosisStretchInstance = null;
 let presentDrumrollInstance = null;
 let presentDrumrollFadeRaf = null;
+let endTrumpetInstance = null;
 let coinTinkStartSec = COIN_TINK_START_FALLBACK_SEC;
 let coinTinkStartResolved = false;
 let popStartSec = POP_START_FALLBACK_SEC;
@@ -631,6 +638,24 @@ function ensureDrumrollAudio() {
   }
 
   return drumrollAudio;
+}
+
+function ensureSadTrumpetAudio() {
+  if (!sadTrumpetAudio) {
+    sadTrumpetAudio = new Audio(SAD_TRUMPET_SRC);
+    sadTrumpetAudio.preload = "auto";
+  }
+
+  return sadTrumpetAudio;
+}
+
+function ensureVictoryTrumpetAudio() {
+  if (!victoryTrumpetAudio) {
+    victoryTrumpetAudio = new Audio(VICTORY_TRUMPET_SRC);
+    victoryTrumpetAudio.preload = "auto";
+  }
+
+  return victoryTrumpetAudio;
 }
 
 function drumrollStartSec() {
@@ -728,6 +753,8 @@ function unlockAudio() {
     ensureStretchAudio(),
     ensurePopAudio(),
     ensureDrumrollAudio(),
+    ensureSadTrumpetAudio(),
+    ensureVictoryTrumpetAudio(),
   ];
 
   for (const audio of sounds) {
@@ -1024,6 +1051,67 @@ function playCoinTink() {
 
     audio.play().catch(() => {});
   };
+
+  if (audio.readyState >= 1) {
+    startPlayback();
+    return;
+  }
+
+  audio.addEventListener("loadedmetadata", startPlayback, { once: true });
+  audio.load();
+}
+
+function stopEndTrumpet() {
+  if (!endTrumpetInstance) {
+    return;
+  }
+
+  endTrumpetInstance.pause();
+  endTrumpetInstance.currentTime = 0;
+  endTrumpetInstance = null;
+}
+
+function playEndTrumpet(kind) {
+  stopEndTrumpet();
+
+  const isVictory = kind === "victory";
+  const template = isVictory ? ensureVictoryTrumpetAudio() : ensureSadTrumpetAudio();
+  const startSec = isVictory ? VICTORY_TRUMPET_START_SEC : SAD_TRUMPET_START_SEC;
+  const audio = template.cloneNode();
+  const startAt = Math.min(
+    startSec,
+    Number.isFinite(template.duration) && template.duration > 0 ? Math.max(0, template.duration - 0.05) : startSec,
+  );
+
+  endTrumpetInstance = audio;
+
+  const startPlayback = () => {
+    if (endTrumpetInstance !== audio) {
+      return;
+    }
+
+    try {
+      audio.currentTime = startAt;
+    } catch {
+      audio.currentTime = 0;
+    }
+
+    audio.play().catch(() => {
+      if (endTrumpetInstance === audio) {
+        endTrumpetInstance = null;
+      }
+    });
+  };
+
+  audio.addEventListener(
+    "ended",
+    () => {
+      if (endTrumpetInstance === audio) {
+        endTrumpetInstance = null;
+      }
+    },
+    { once: true },
+  );
 
   if (audio.readyState >= 1) {
     startPlayback();
@@ -1529,6 +1617,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
     lastParticleTick: null,
     status: "ready",
     resultReason: null,
+    endTrumpetPlayed: false,
     message: "Feed the robot first, then invest coins so they can make more coins.",
     presents: Array.from({ length: settings.presents }, (_, index) => ({
       emoji: emojis[index % emojis.length],
@@ -1540,6 +1629,7 @@ function newGame(settings = state?.settings ?? DEFAULT_SETTINGS) {
 
   clearPresentReveals();
   stopBankMitosisStretch();
+  stopEndTrumpet();
 
   for (let count = 0; count < settings.start; count += 1) {
     createRobotCoin(timestamp);
@@ -1585,7 +1675,9 @@ function endGame(status, reason) {
 
   state.status = status;
   state.resultReason = reason;
+  state.endTrumpetPlayed = false;
   state.message = resultMessageForState().message;
+  stopBankMitosisStretch();
 }
 
 function processIncome(timestamp) {
@@ -2482,8 +2574,29 @@ function hasActivePresentReveal(timestamp = performance.now()) {
   );
 }
 
+function hasPendingEndGameFx(timestamp = performance.now()) {
+  return (
+    hasActivePresentReveal(timestamp) ||
+    presentDrumrollInstance !== null ||
+    (state.bankChaChingBlocksUntil !== null && timestamp < state.bankChaChingBlocksUntil)
+  );
+}
+
+function maybePlayEndTrumpet() {
+  if (!state || state.endTrumpetPlayed || (state.status !== "won" && state.status !== "lost")) {
+    return;
+  }
+
+  if (hasPendingEndGameFx()) {
+    return;
+  }
+
+  state.endTrumpetPlayed = true;
+  playEndTrumpet(state.status === "won" ? "victory" : "sad");
+}
+
 function renderResultOverlay() {
-  if (state.status === "playing" || state.status === "ready" || hasActivePresentReveal()) {
+  if (state.status === "playing" || state.status === "ready" || hasPendingEndGameFx()) {
     dom.resultOverlay.hidden = true;
 
     if (state.status === "playing" || state.status === "ready") {
@@ -2492,6 +2605,8 @@ function renderResultOverlay() {
 
     return;
   }
+
+  maybePlayEndTrumpet();
 
   const result = resultMessageForState();
 
