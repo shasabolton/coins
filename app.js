@@ -3212,9 +3212,12 @@ document.addEventListener("visibilitychange", () => {
 document.addEventListener(
   "touchmove",
   (event) => {
-    if (drag) {
-      event.preventDefault();
+    // Block browser pull-to-refresh; allow scrolling inside dialogs only.
+    if (event.target.closest("dialog")) {
+      return;
     }
+
+    event.preventDefault();
   },
   { passive: false },
 );

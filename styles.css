@@ -27,13 +27,18 @@ html,
 body {
   height: 100%;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 body {
+  position: fixed;
+  inset: 0;
+  width: 100%;
   min-height: 100dvh;
   margin: 0;
   display: grid;
   place-items: center;
+  touch-action: none;
   background:
     radial-gradient(circle at top left, rgba(247, 183, 51, 0.25), transparent 28rem),
     linear-gradient(145deg, #f8efe0, #ead8bb);
@@ -1209,6 +1214,7 @@ h2 {
   color: var(--ink);
   box-shadow: var(--shadow);
   overflow: auto;
+  touch-action: pan-y;
 }
 
 .settings-dialog::backdrop {
