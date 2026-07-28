@@ -133,7 +133,6 @@ const dom = {
   resultMessage: document.querySelector("#result-message"),
   resultDetail: document.querySelector("#result-detail"),
   resultNewGameButton: document.querySelector("#result-new-game-button"),
-  scoreboard: document.querySelector(".scoreboard"),
   appMenu: document.querySelector(".app-menu"),
   newGameButton: document.querySelector("#new-game-button"),
   settingsButton: document.querySelector("#settings-button"),
@@ -157,7 +156,6 @@ const dom = {
 let state;
 let drag = null;
 let lastHighlightedTarget = null;
-let allowBrowserPullRefresh = false;
 
 function depreciationMs() {
   return payrateMs() * state.settings.depreciation;
@@ -3212,48 +3210,11 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 document.addEventListener(
-  "touchstart",
-  (event) => {
-    const touch = event.touches[0];
-    const target = event.target;
-
-    if (!touch || target.closest(".coin")) {
-      allowBrowserPullRefresh = false;
-      return;
-    }
-
-    // Native pull-to-refresh only from the header strip (scoreboard and above).
-    const headerBottom = dom.scoreboard.getBoundingClientRect().bottom;
-    allowBrowserPullRefresh = touch.clientY <= headerBottom;
-  },
-  { passive: true },
-);
-
-function clearPullRefreshGesture() {
-  allowBrowserPullRefresh = false;
-}
-
-document.addEventListener("touchend", clearPullRefreshGesture, { passive: true });
-document.addEventListener("touchcancel", clearPullRefreshGesture, { passive: true });
-
-document.addEventListener(
   "touchmove",
   (event) => {
     if (drag) {
       event.preventDefault();
-      return;
     }
-
-    if (allowBrowserPullRefresh) {
-      return;
-    }
-
-    // Keep settings (and other dialogs) scrollable.
-    if (event.target.closest("dialog")) {
-      return;
-    }
-
-    event.preventDefault();
   },
   { passive: false },
 );
